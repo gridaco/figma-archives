@@ -1,3 +1,4 @@
+import math
 import random
 import threading
 import json
@@ -14,9 +15,12 @@ from datetime import datetime
 from tqdm import tqdm
 
 
+target = 'popular' # recent, trending, popular
+output = f'output.{target}.json'
+
 class FigmaSpider(scrapy.Spider):
     name = 'figma_spider'
-    start_urls = ['https://www.figma.com/community/files/figma/']
+    start_urls = [f'https://www.figma.com/community/files/figma/{target}']
     progress_bar = tqdm(total=1, desc="Crawling items", position=0)
 
 
@@ -27,7 +31,7 @@ class FigmaSpider(scrapy.Spider):
         self.driver.get(response.url)
         scraped_data = []
         try:
-            with open("output.json", "r", encoding="utf-8") as f:
+            with open(output, "r", encoding="utf-8") as f:
                 for line in f:
                     data = json.loads(line)
                     scraped_data.append(data)
@@ -58,13 +62,14 @@ class FigmaSpider(scrapy.Spider):
                     # throttle the requests
                     entries+=1
                     sleep = random.uniform(3, 8)
-                    tqdm.write(f"Entry: {entries}, sleeping for {sleep}")
+                    tqdm.write(f"Entry: {entries}, sleeping for {math.floor(sleep)}")
                     time.sleep(sleep)
 
                     # Scroll down to the bottom
                     self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
                     # Scroll up a little bit
                     self.driver.execute_script("window.scrollBy(0, -300);")
+                    time.sleep(0.5)
                     # Scroll back to the bottom
                     self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
                     
@@ -118,7 +123,7 @@ class FigmaSpider(scrapy.Spider):
                         scraped_ids.add(id)
 
             # Save the updated data to output.json
-            with open("output.json", "w", encoding="utf-8") as f:
+            with open(output, "w", encoding="utf-8") as f:
                 for item in scraped_data:
                     f.write(json.dumps(item) + "\n")
 
