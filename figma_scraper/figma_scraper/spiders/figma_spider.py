@@ -1,5 +1,7 @@
+import random
 import threading
 import json
+import time
 import scrapy
 from scrapy.selector import Selector
 from selenium import webdriver
@@ -9,10 +11,14 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from datetime import datetime
+from tqdm import tqdm
+
 
 class FigmaSpider(scrapy.Spider):
     name = 'figma_spider'
     start_urls = ['https://www.figma.com/community/files/figma/']
+    progress_bar = tqdm(total=1, desc="Crawling items", position=0)
+
 
     def __init__(self):
         self.driver = webdriver.Chrome(service=Service(executable_path=ChromeDriverManager().install()))
@@ -35,7 +41,7 @@ class FigmaSpider(scrapy.Spider):
             with open("output.json", "w", encoding="utf-8") as f:
                 for item in scraped_data:
                     f.write(json.dumps(item, ensure_ascii=False) + "\n")
-            print("Data saved to output.json")
+            tqdm.write(f"{len(scraped_data)} items saved to output.json")
 
         def save_data_periodically():
             save_data()
@@ -43,10 +49,18 @@ class FigmaSpider(scrapy.Spider):
 
         save_data_periodically()
 
+        entries = 0
+
         try:
 
             while True:
                 try:
+                    # throttle the requests
+                    entries+=1
+                    sleep = random.uniform(3, 8)
+                    tqdm.write(f"Entry: {entries}, sleeping for {sleep}")
+                    time.sleep(sleep)
+
                     # Scroll down to the bottom
                     self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
                     # Scroll up a little bit
@@ -67,6 +81,13 @@ class FigmaSpider(scrapy.Spider):
 
                 # Extract items
                 items = scrapy_selector.xpath('//div[contains(@class, "feed_page--feedGrid--QViml")]/div')
+
+                # update the progress bar
+                _size = len(items)
+                self.progress_bar.total = _size
+                self.progress_bar.update(_size)
+
+
                 for item in items:
                     link = item.xpath('.//a[contains(@class, "feed_page--resourcePreview--RvDvR")]/@href').get()
                     id = link.split('/')[-1]
@@ -102,10 +123,10 @@ class FigmaSpider(scrapy.Spider):
                     f.write(json.dumps(item) + "\n")
 
         except Exception as e:
-            print(f"Error occurred during scraping: {e}")
+            tqdm.write(f"Error occurred during scraping: {e}")
 
         finally:
-            print("Script terminated")
+            tqdm.write("Script terminated")
 
             # save the data one last time
             save_data()
