@@ -1,3 +1,4 @@
+import threading
 import json
 import scrapy
 from scrapy.selector import Selector
@@ -29,61 +30,85 @@ class FigmaSpider(scrapy.Spider):
 
         scraped_ids = set(item['id'] for item in scraped_data)
 
-        while True:
-            try:
-                # Scroll down to the bottom
-                self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-                # Scroll up a little bit
-                self.driver.execute_script("window.scrollBy(0, -300);")
-                # Scroll back to the bottom
-                self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-                
-                WebDriverWait(self.driver, 10).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "div.feed_page--feedGrid--QViml"))
-                )
-            except:
-                # Break the loop if there are no more items to load
-                break
 
-            # Get the source code and parse it with Scrapy
-            source = self.driver.page_source
-            scrapy_selector = Selector(text=source)
+        def save_data():
+            with open("output.json", "w", encoding="utf-8") as f:
+                for item in scraped_data:
+                    f.write(json.dumps(item, ensure_ascii=False) + "\n")
+            print("Data saved to output.json")
 
-            # Extract items
-            items = scrapy_selector.xpath('//div[contains(@class, "feed_page--feedGrid--QViml")]/div')
-            for item in items:
-                link = item.xpath('.//a[contains(@class, "feed_page--resourcePreview--RvDvR")]/@href').get()
-                id = link.split('/')[-1]
+        def save_data_periodically():
+            save_data()
+            threading.Timer(600, save_data_periodically).start()
 
-                # Skip already scraped items
-                if id in scraped_ids:
-                    continue
-                else:
-                    title = item.xpath('.//a[contains(@class, "feed_page--title--VobyW")]/text()').get()
-                    thumbnail = item.xpath('.//img/@src').get()
-                    author_link = item.xpath('.//a[contains(@class, "feed_page--resourceMetaAuthor--JOdu5")]/@href').get()
-                    author_name = item.xpath('.//span[contains(@class, "feed_page--author--yzyAW")]/text()').get()
-                    likes_count = item.xpath('.//div[contains(@class, "feed_page--action__default_like--wLEVs")]/text()').get()
+        save_data_periodically()
 
-                    # Save the data as JSON
-                    data = {
-                        "id": id,
-                        "link": f"https://www.figma.com{link}",
-                        "title": title,
-                        "thumbnail": thumbnail,
-                        "author_link": f"https://www.figma.com{author_link}",
-                        "author_name": author_name,
-                        "likes_count": int(likes_count) if likes_count else 0,
-                        "crawled_at": datetime.utcnow().isoformat()
-                    }
+        try:
 
-                    scraped_data.append(data)
-                    scraped_ids.add(id)
+            while True:
+                try:
+                    # Scroll down to the bottom
+                    self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                    # Scroll up a little bit
+                    self.driver.execute_script("window.scrollBy(0, -300);")
+                    # Scroll back to the bottom
+                    self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                    
+                    WebDriverWait(self.driver, 10).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, "div.feed_page--feedGrid--QViml"))
+                    )
+                except:
+                    # Break the loop if there are no more items to load
+                    break
 
-        # Save the updated data to output.json
-        with open("output.json", "w", encoding="utf-8") as f:
-            for item in scraped_data:
-                f.write(json.dumps(item) + "\n")
+                # Get the source code and parse it with Scrapy
+                source = self.driver.page_source
+                scrapy_selector = Selector(text=source)
+
+                # Extract items
+                items = scrapy_selector.xpath('//div[contains(@class, "feed_page--feedGrid--QViml")]/div')
+                for item in items:
+                    link = item.xpath('.//a[contains(@class, "feed_page--resourcePreview--RvDvR")]/@href').get()
+                    id = link.split('/')[-1]
+
+                    # Skip already scraped items
+                    if id in scraped_ids:
+                        continue
+                    else:
+                        title = item.xpath('.//a[contains(@class, "feed_page--title--VobyW")]/text()').get()
+                        thumbnail = item.xpath('.//img/@src').get()
+                        author_link = item.xpath('.//a[contains(@class, "feed_page--resourceMetaAuthor--JOdu5")]/@href').get()
+                        author_name = item.xpath('.//span[contains(@class, "feed_page--author--yzyAW")]/text()').get()
+                        likes_count = item.xpath('.//div[contains(@class, "feed_page--action__default_like--wLEVs")]/text()').get()
+
+                        # Save the data as JSON
+                        data = {
+                            "id": id,
+                            "link": f"https://www.figma.com{link}",
+                            "title": title,
+                            "thumbnail": thumbnail,
+                            "author_link": f"https://www.figma.com{author_link}",
+                            "author_name": author_name,
+                            "likes_count": int(likes_count) if likes_count else 0,
+                            "crawled_at": datetime.utcnow().isoformat()
+                        }
+
+                        scraped_data.append(data)
+                        scraped_ids.add(id)
+
+            # Save the updated data to output.json
+            with open("output.json", "w", encoding="utf-8") as f:
+                for item in scraped_data:
+                    f.write(json.dumps(item) + "\n")
+
+        except Exception as e:
+            print(f"Error occurred during scraping: {e}")
+
+        finally:
+            print("Script terminated")
+
+            # save the data one last time
+            save_data()
 
     def close_spider(self, spider):
         self.driver.quit()
