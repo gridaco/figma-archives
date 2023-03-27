@@ -13,6 +13,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from datetime import datetime
 from tqdm import tqdm
+import re
+
 
 
 target = 'popular' # recent, trending, popular
@@ -107,6 +109,12 @@ class FigmaSpider(scrapy.Spider):
                         author_name = item.xpath('.//span[contains(@class, "feed_page--author--yzyAW")]/text()').get()
                         likes_count = item.xpath('.//div[contains(@class, "feed_page--action__default_like--wLEVs")]/text()').get()
 
+                        try:
+                            likes_match = re.match(r'^(\d+)([kKmM])?$', likes_count)
+                            likes_value = int(likes_match.group(1)) * {'k': 1000, 'm': 1000000}.get(likes_match.group(2).lower(), 1)
+                        except:
+                            likes_value = 0
+
                         # Save the data as JSON
                         data = {
                             "id": id,
@@ -115,7 +123,7 @@ class FigmaSpider(scrapy.Spider):
                             "thumbnail": thumbnail,
                             "author_link": f"https://www.figma.com{author_link}",
                             "author_name": author_name,
-                            "likes_count": int(likes_count) if likes_count else 0,
+                            "likes_count": likes_value,
                             "crawled_at": datetime.utcnow().isoformat()
                         }
 
