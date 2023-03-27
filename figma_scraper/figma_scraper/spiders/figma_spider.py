@@ -11,9 +11,10 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.options import Options
 from datetime import datetime
 from tqdm import tqdm
-import re
+
 
 
 
@@ -22,12 +23,15 @@ output = f'output.{target}.json'
 
 class FigmaSpider(scrapy.Spider):
     name = 'figma_spider'
-    start_urls = [f'https://www.figma.com/community/files/figma/{target}']
+    start_urls = [f'https://www.figma.com/community/files/figma/free/{target}']
     progress_bar = tqdm(total=1, desc="Crawling items", position=0)
 
 
     def __init__(self):
-        self.driver = webdriver.Chrome(service=Service(executable_path=ChromeDriverManager().install()))
+        options = Options()
+        options.add_argument("--headless")
+        options.add_argument("--disable-gpu")
+        self.driver = webdriver.Chrome(service=Service(executable_path=ChromeDriverManager().install()), options=options)
 
     def parse(self, response):
         self.driver.get(response.url)
@@ -44,10 +48,10 @@ class FigmaSpider(scrapy.Spider):
 
 
         def save_data():
-            with open("output.json", "w", encoding="utf-8") as f:
+            with open(output, "w", encoding="utf-8") as f:
                 for item in scraped_data:
                     f.write(json.dumps(item, ensure_ascii=False) + "\n")
-            tqdm.write(f"{len(scraped_data)} items saved to output.json")
+            tqdm.write(f"{len(scraped_data)} items saved to {output}")
 
         def save_data_periodically():
             save_data()
@@ -110,9 +114,8 @@ class FigmaSpider(scrapy.Spider):
                         likes_count = item.xpath('.//div[contains(@class, "feed_page--action__default_like--wLEVs")]/text()').get()
 
                         try:
-                            likes_match = re.match(r'^(\d+)([kKmM])?$', likes_count)
-                            likes_value = int(likes_match.group(1)) * {'k': 1000, 'm': 1000000}.get(likes_match.group(2).lower(), 1)
-                        except:
+                            likes_value = int(float(likes_count.lower().replace(",", "").replace(".", "").replace("k", "000").replace("m", "000000")))
+                        except ValueError:
                             likes_value = 0
 
                         # Save the data as JSON
