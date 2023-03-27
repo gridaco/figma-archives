@@ -20,7 +20,7 @@ class FigmaSpider(scrapy.Spider):
         self.driver.get(response.url)
         scraped_data = []
         try:
-            with open("output.json", "r") as f:
+            with open("output.json", "r", encoding="utf-8") as f:
                 for line in f:
                     data = json.loads(line)
                     scraped_data.append(data)
@@ -31,8 +31,13 @@ class FigmaSpider(scrapy.Spider):
 
         while True:
             try:
-                # Scroll down to load more items
+                # Scroll down to the bottom
                 self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                # Scroll up a little bit
+                self.driver.execute_script("window.scrollBy(0, -300);")
+                # Scroll back to the bottom
+                self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                
                 WebDriverWait(self.driver, 10).until(
                     EC.presence_of_element_located((By.CSS_SELECTOR, "div.feed_page--feedGrid--QViml"))
                 )
@@ -76,7 +81,7 @@ class FigmaSpider(scrapy.Spider):
                     scraped_ids.add(id)
 
         # Save the updated data to output.json
-        with open("output.json", "w") as f:
+        with open("output.json", "w", encoding="utf-8") as f:
             for item in scraped_data:
                 f.write(json.dumps(item) + "\n")
 
