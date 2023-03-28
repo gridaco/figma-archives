@@ -121,6 +121,8 @@ def main(file, batch_size):
     global progress_bar
     progress_bar = tqdm(total=len(lines))
 
+    # intial authentication
+    authenticate(driver)
     process_files(driver, lines, batch_size, progress)
 
     driver.quit()
