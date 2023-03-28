@@ -14,6 +14,9 @@ from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support import expected_conditions as EC
 from tqdm import tqdm
 
+
+progress_bar = None
+
 load_dotenv()
 
 credentials = {
@@ -23,10 +26,11 @@ credentials = {
 
 # ensure credentials are set
 if not credentials['email'] or not credentials['password']:
-    print("Please set the FIGMA_EMAIL and FIGMA_PASSWORD environment variables.")
+    tqdm.write(
+        "Please set the FIGMA_EMAIL and FIGMA_PASSWORD environment variables.")
     exit(1)
 
-progress_file = "copies.json"
+progress_file = f"./progress/{credentials['email']}.copies.json"
 
 
 def load_progress():
@@ -47,7 +51,7 @@ def save_progress(progress):
 def remove_duplicates(file, progress):
     file_path = Path(file)
     if not file_path.exists() or not file_path.is_file():
-        print(f"Invalid file path: {file}")
+        tqdm.write(f"Invalid file path: {file}")
         return
 
     with file_path.open() as f:
@@ -104,16 +108,17 @@ def authenticate(driver):
 @click.command()
 @click.option('--file', help='Path to the JSONL file containing a list of community files.', required=True, type=click.Path(exists=True, dir_okay=False))
 @click.option('--batch-size', default=1, help='Number of files to process in a single batch.', type=int)
-@click.option('--no-auth', is_flag=True, help='Set this flag if already authenticated.')
-def main(file, batch_size, no_auth):
+def main(file, batch_size):
     # Initialize Selenium WebDriver
     driver = webdriver.Chrome(ChromeDriverManager().install())
 
-    if not no_auth:
-        authenticate(driver)
-
     progress = load_progress()
     lines = remove_duplicates(file, progress)
+
+    # Initialize the progress bar
+    global progress_bar
+    progress_bar = tqdm(total=len(lines))
+
     process_files(driver, lines, batch_size, progress)
 
     driver.quit()
@@ -136,6 +141,9 @@ def process_files(driver, lines, batch_size, progress):
             progress[link] = result
             save_progress(progress)
             processed_count += 1
+
+        global progress_bar
+        progress_bar.update(1)
 
         time.sleep(5)
 
@@ -178,7 +186,7 @@ def copy_file(driver, link):
 
     except TimeoutException:
         # If the iframe is not found, assume the user is authenticated
-        print(f"File at {link} copied to drafts.")
+        tqdm.write(f"File at {link} copied to drafts.")
 
     try:
         # After copying the file, the site will open new tab to the drafted file page. read the url and save it for later
