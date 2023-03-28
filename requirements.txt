@@ -2,3 +2,4 @@ selenium
 scrapy
 webdriver-manager
 click
+tqdm
