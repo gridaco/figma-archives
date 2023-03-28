@@ -149,7 +149,7 @@ def process_files(driver, lines, batch_size, progress):
         global progress_bar
         progress_bar.update(1)
 
-        time.sleep(5)
+        time.sleep(1)
 
 
 def copy_file(driver, link, max_retries=3):
