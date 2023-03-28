@@ -1,5 +1,7 @@
 import json
+import math
 import os
+import random
 from dotenv import load_dotenv
 import time
 from pathlib import Path
@@ -149,7 +151,7 @@ def process_files(driver, lines, batch_size, progress):
         global progress_bar
         progress_bar.update(1)
 
-        time.sleep(1)
+        time.sleep(random.uniform(0.5, 1.5))
 
 
 def copy_file(driver, link, max_retries=3):
@@ -170,7 +172,7 @@ def copy_file(driver, link, max_retries=3):
             time.sleep(1)
 
 
-    time.sleep(1)  # Add a short sleep duration before locating the button
+    time.sleep(0.5)  # Add a short sleep duration before locating the button
 
     tqdm.write(f"Locating the copy button...")
     try:
