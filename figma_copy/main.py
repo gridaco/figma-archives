@@ -11,6 +11,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support import expected_conditions as EC
@@ -108,13 +109,37 @@ def authenticate(driver):
 
     return True
 
+def get_driver_options():
+    chrome_options = Options()
+
+    # Disable images
+    chrome_options.add_argument("--blink-settings=imagesEnabled=false")
+
+    # Disable CSS
+    chrome_options.add_argument("--disable-web-resources")
+
+    # Other options to improve performance
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--disable-infobars")
+    chrome_options.add_argument("--disable-popup-blocking")
+    chrome_options.add_argument("--disable-notifications")
+    # chrome_options.add_argument("--disable-gpu") - removed cuz figma uses webgl and page fails if gpu is disabled
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--mute-audio")
+    chrome_options.add_argument('--disable-smooth-scrolling')
+
+
+    return chrome_options
+
 
 @click.command()
 @click.option('--file', help='Path to the JSONL file containing a list of community files.', required=True, type=click.Path(exists=True, dir_okay=False))
 @click.option('--batch-size', default=1, help='Number of files to process in a single batch.', type=int)
 def main(file, batch_size):
     # Initialize Selenium WebDriver
-    driver = webdriver.Chrome(ChromeDriverManager().install())
+    chrome_options = get_driver_options()
+    driver = webdriver.Chrome(ChromeDriverManager().install(), options=chrome_options)
 
     progress = load_progress()
     lines = remove_duplicates(file, progress)
