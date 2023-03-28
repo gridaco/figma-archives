@@ -21,27 +21,42 @@ credentials = {
     "password": os.getenv("FIGMA_PASSWORD"),
 }
 
-
 # ensure credentials are set
 if not credentials['email'] or not credentials['password']:
     print("Please set the FIGMA_EMAIL and FIGMA_PASSWORD environment variables.")
     exit(1)
 
+progress_file = "copies.json"
 
-@click.command()
-@click.option('--file', help='Path to the JSONL file containing a list of community files.', required=True, type=click.Path(exists=True, dir_okay=False))
-@click.option('--batch-size', default=1, help='Number of files to process in a single batch.', type=int)
-@click.option('--no-auth', is_flag=True, help='Set this flag if already authenticated.')
-def main(file, batch_size, no_auth):
-    # Initialize Selenium WebDriver
-    driver = webdriver.Chrome(ChromeDriverManager().install())
 
-    if not no_auth:
-        authenticate(driver)
+def load_progress():
+    if not Path(progress_file).is_file():
+        return {}
 
-    process_files(driver, file, batch_size)
+    with open(progress_file, 'r') as f:
+        progress = json.load(f)
 
-    driver.quit()
+    return progress
+
+
+def save_progress(progress):
+    with open(progress_file, 'w') as f:
+        json.dump(progress, f, indent=4)
+
+
+def remove_duplicates(file, progress):
+    file_path = Path(file)
+    if not file_path.exists() or not file_path.is_file():
+        print(f"Invalid file path: {file}")
+        return
+
+    with file_path.open() as f:
+        lines = f.readlines()
+
+    # Remove duplicates by checking if the link is in progress
+    unique_lines = [line for line in lines if json.loads(line)[
+        'link'] not in progress]
+    return unique_lines
 
 
 def authenticate(driver):
@@ -86,29 +101,42 @@ def authenticate(driver):
     return True
 
 
-def process_files(driver, file, batch_size):
-    file_path = Path(file)
-    if not file_path.exists() or not file_path.is_file():
-        print(f"Invalid file path: {file}")
-        return
+@click.command()
+@click.option('--file', help='Path to the JSONL file containing a list of community files.', required=True, type=click.Path(exists=True, dir_okay=False))
+@click.option('--batch-size', default=1, help='Number of files to process in a single batch.', type=int)
+@click.option('--no-auth', is_flag=True, help='Set this flag if already authenticated.')
+def main(file, batch_size, no_auth):
+    # Initialize Selenium WebDriver
+    driver = webdriver.Chrome(ChromeDriverManager().install())
 
-    with file_path.open() as f:
-        lines = f.readlines()
+    if not no_auth:
+        authenticate(driver)
 
-    batch_start = 0
-    while batch_start < len(lines):
-        batch_end = batch_start + batch_size
-        batch_lines = lines[batch_start:batch_end]
+    progress = load_progress()
+    lines = remove_duplicates(file, progress)
+    process_files(driver, lines, batch_size, progress)
 
-        for line in batch_lines:
-            file_obj = json.loads(line)
-            link = file_obj['link']
-            result = copy_file(driver, link)
-            if not result is False:
-                # result is a newly copied file url. save it.
-                result
+    driver.quit()
 
-        batch_start = batch_end
+
+# Add the progress parameter to process_files
+
+def process_files(driver, lines, batch_size, progress):
+    processed_count = 0
+    for line in lines:
+        if processed_count >= batch_size:
+            break
+
+        file_obj = json.loads(line)
+        link = file_obj['link']
+
+        result = copy_file(driver, link)
+        if not result is False:
+            # result is a newly copied file url. save it.
+            progress[link] = result
+            save_progress(progress)
+            processed_count += 1
+
         time.sleep(5)
 
 
