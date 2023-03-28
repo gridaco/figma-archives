@@ -15,6 +15,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from tqdm import tqdm
 
 
+err_timeout_code = 'timeout'
+
 progress_bar = None
 
 load_dotenv()
@@ -148,9 +150,23 @@ def process_files(driver, lines, batch_size, progress):
         time.sleep(5)
 
 
-def copy_file(driver, link):
-    tqdm.write(f"Copying file at {link} to drafts...")
-    driver.get(link)
+def copy_file(driver, link, max_retries=3):
+
+    # sometimes the page takes a while to load, throw a timeout exception.
+    retries = 0
+    while retries < max_retries:
+        try:
+            tqdm.write(f"Copying file at {link} to drafts...")
+            driver.get(link)
+            break
+        except TimeoutException:
+            retries += 1
+            tqdm.write(f"TimeoutException encountered. Retrying {retries}/{max_retries}...")
+            if retries == max_retries:
+                tqdm.write(f"Failed to load {link} after {max_retries} retries. Skipping...")
+                return err_timeout_code
+            time.sleep(1)
+
 
     time.sleep(1)  # Add a short sleep duration before locating the button
 
