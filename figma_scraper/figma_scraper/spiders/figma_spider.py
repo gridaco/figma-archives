@@ -17,17 +17,16 @@ from tqdm import tqdm
 
 
 
-
-target = 'popular' # recent, trending, popular
-output = f'output.{target}.json'
-
 class FigmaSpider(scrapy.Spider):
     name = 'figma_spider'
-    start_urls = [f'https://www.figma.com/community/files/figma/free/{target}']
+    start_urls = []
     progress_bar = tqdm(total=1, desc="Crawling items", position=0)
 
 
-    def __init__(self):
+    def __init__(self, target='popular', **kwargs):
+        self.target = target # recent, trending, popular , e.g. pass with -a target=recent
+        self.output = f'output.{target}.json'
+        self.start_urls = [f'https://www.figma.com/community/files/figma/free/{target}']
         options = Options()
         options.add_argument("--headless")
         options.add_argument("--disable-gpu")
@@ -37,7 +36,7 @@ class FigmaSpider(scrapy.Spider):
         self.driver.get(response.url)
         scraped_data = []
         try:
-            with open(output, "r", encoding="utf-8") as f:
+            with open(self.output, "r", encoding="utf-8") as f:
                 for line in f:
                     data = json.loads(line)
                     scraped_data.append(data)
@@ -48,10 +47,10 @@ class FigmaSpider(scrapy.Spider):
 
 
         def save_data():
-            with open(output, "w", encoding="utf-8") as f:
+            with open(self.output, "w", encoding="utf-8") as f:
                 for item in scraped_data:
                     f.write(json.dumps(item, ensure_ascii=False) + "\n")
-            tqdm.write(f"{len(scraped_data)} items saved to {output}")
+            tqdm.write(f"{len(scraped_data)} items saved to {self.output}")
 
         def save_data_periodically():
             save_data()
@@ -134,7 +133,7 @@ class FigmaSpider(scrapy.Spider):
                         scraped_ids.add(id)
 
             # Save the updated data to output.json
-            with open(output, "w", encoding="utf-8") as f:
+            with open(self.output, "w", encoding="utf-8") as f:
                 for item in scraped_data:
                     f.write(json.dumps(item) + "\n")
 
