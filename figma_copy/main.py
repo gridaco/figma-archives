@@ -13,6 +13,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support import expected_conditions as EC
 from tqdm import tqdm
@@ -139,20 +140,28 @@ def get_driver_options():
 def main(file, batch_size):
     # Initialize Selenium WebDriver
     chrome_options = get_driver_options()
-    driver = webdriver.Chrome(ChromeDriverManager().install(), options=chrome_options)
+    caps = DesiredCapabilities().CHROME
+    caps["pageLoadStrategy"] = "none" # this disables waiting for page load
+    driver = webdriver.Chrome(ChromeDriverManager().install(), options=chrome_options, desired_capabilities=caps)
 
-    progress = load_progress()
-    lines = remove_duplicates(file, progress)
 
-    # Initialize the progress bar
-    global progress_bar
-    progress_bar = tqdm(total=len(lines))
+    try:
+        progress = load_progress()
+        lines = remove_duplicates(file, progress)
 
-    # intial authentication
-    authenticate(driver)
-    process_files(driver, lines, batch_size, progress)
+        # Initialize the progress bar
+        global progress_bar
+        progress_bar = tqdm(total=len(lines))
 
-    driver.quit()
+        # intial authentication
+        authenticate(driver)
+        process_files(driver, lines, batch_size, progress)
+
+    except KeyboardInterrupt:
+        tqdm.write("\nInterrupted by user. Exiting...")
+    finally:
+        driver.quit()
+
 
 
 # Add the progress parameter to process_files
@@ -197,7 +206,7 @@ def copy_file(driver, link, max_retries=3):
             time.sleep(1)
 
 
-    # time.sleep(0.5)  # Add a short sleep duration before locating the button
+    time.sleep(0.5)  # Add a short sleep duration before locating the button
 
     tqdm.write(f"Locating the copy button...")
     try:
@@ -211,11 +220,7 @@ def copy_file(driver, link, max_retries=3):
         tqdm.write(f"Unable to locate the copy button. Skipping...")
         return
 
-    # Use ActionChains to click the button
-    actions = ActionChains(driver)
-    actions.move_to_element(copy_button)
-    actions.click(copy_button)
-    actions.perform()
+    copy_button.click()
 
     # Check for the presence of the authentication iframe
     try:
@@ -258,6 +263,7 @@ def copy_file(driver, link, max_retries=3):
     except:
         tqdm.write(f"Failed to copy the file at {link}")
         return False
+
 
 
 if __name__ == "__main__":
