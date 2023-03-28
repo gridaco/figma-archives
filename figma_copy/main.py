@@ -14,7 +14,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, StaleElementReferenceException
 from selenium.webdriver.support import expected_conditions as EC
 from tqdm import tqdm
 
@@ -149,12 +149,13 @@ def main(file, batch_size):
         progress = load_progress()
         lines = remove_duplicates(file, progress)
 
+        # intial authentication
+        authenticate(driver)
+
         # Initialize the progress bar
         global progress_bar
         progress_bar = tqdm(total=len(lines))
 
-        # intial authentication
-        authenticate(driver)
         process_files(driver, lines, batch_size, progress)
 
     except KeyboardInterrupt:
@@ -219,8 +220,13 @@ def copy_file(driver, link, max_retries=3):
         # this could be beause the file is a paid file
         tqdm.write(f"Unable to locate the copy button. Skipping...")
         return
-
-    copy_button.click()
+    
+    # Click the copy button
+    try:
+        copy_button.click()
+    except StaleElementReferenceException:
+        tqdm.write(f"StaleElementReferenceException encountered. Retrying...")
+        return copy_file(driver, link)
 
     # Check for the presence of the authentication iframe
     try:
