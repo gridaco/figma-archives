@@ -7,13 +7,13 @@ Donwload once, with full data, so we can use it offline and won't need to access
 ## Usage
 
 ```bash
-python3 main.py -f <list_file> -t <figma_token> -o <output_dir>
+python3 files.py -f <list_file> -t <figma_token> -o <output_dir>
 
-# for example
-python3 main.py -f ../figma_copy/progress/figma@grida.co.copies.json
+# examples
+python3 files.py -f ../figma_copy/progress/figma@grida.co.copies.json
 
-# fetching only files
-python3 files.py -f ../the_rest_is_the_same
+# fetching only images (after fetching files)
+python3 images.py --src='./downloads/*.json'
 ```
 
 Alternatively, you can set the -t (access token) under `.env`
