@@ -1,5 +1,7 @@
 import json
+import math
 import os
+import random
 from dotenv import load_dotenv
 import time
 from pathlib import Path
@@ -9,11 +11,15 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
-from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+from selenium.common.exceptions import TimeoutException, StaleElementReferenceException
 from selenium.webdriver.support import expected_conditions as EC
 from tqdm import tqdm
 
+
+err_timeout_code = 'timeout'
 
 progress_bar = None
 
@@ -104,24 +110,59 @@ def authenticate(driver):
 
     return True
 
+def get_driver_options():
+    chrome_options = Options()
+
+    # Disable images
+    chrome_options.add_argument("--blink-settings=imagesEnabled=false")
+
+    # Disable CSS
+    chrome_options.add_argument("--disable-web-resources")
+
+    # Other options to improve performance
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--disable-infobars")
+    chrome_options.add_argument("--disable-popup-blocking")
+    chrome_options.add_argument("--disable-notifications")
+    # chrome_options.add_argument("--disable-gpu") - removed cuz figma uses webgl and page fails if gpu is disabled
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--mute-audio")
+    chrome_options.add_argument('--disable-smooth-scrolling')
+
+
+    return chrome_options
+
 
 @click.command()
 @click.option('--file', help='Path to the JSONL file containing a list of community files.', required=True, type=click.Path(exists=True, dir_okay=False))
 @click.option('--batch-size', default=1, help='Number of files to process in a single batch.', type=int)
 def main(file, batch_size):
     # Initialize Selenium WebDriver
-    driver = webdriver.Chrome(ChromeDriverManager().install())
+    chrome_options = get_driver_options()
+    caps = DesiredCapabilities().CHROME
+    caps["pageLoadStrategy"] = "none" # this disables waiting for page load
+    driver = webdriver.Chrome(ChromeDriverManager().install(), options=chrome_options, desired_capabilities=caps)
 
-    progress = load_progress()
-    lines = remove_duplicates(file, progress)
 
-    # Initialize the progress bar
-    global progress_bar
-    progress_bar = tqdm(total=len(lines))
+    try:
+        progress = load_progress()
+        lines = remove_duplicates(file, progress)
 
-    process_files(driver, lines, batch_size, progress)
+        # intial authentication
+        authenticate(driver)
 
-    driver.quit()
+        # Initialize the progress bar
+        global progress_bar
+        progress_bar = tqdm(total=len(lines))
+
+        process_files(driver, lines, batch_size, progress)
+
+    except KeyboardInterrupt:
+        tqdm.write("\nInterrupted by user. Exiting...")
+    finally:
+        driver.quit()
+
 
 
 # Add the progress parameter to process_files
@@ -145,14 +186,28 @@ def process_files(driver, lines, batch_size, progress):
         global progress_bar
         progress_bar.update(1)
 
-        time.sleep(5)
+        # time.sleep(random.uniform(0.5, 1.5))
 
 
-def copy_file(driver, link):
-    tqdm.write(f"Copying file at {link} to drafts...")
-    driver.get(link)
+def copy_file(driver, link, max_retries=3):
 
-    time.sleep(1)  # Add a short sleep duration before locating the button
+    # sometimes the page takes a while to load, throw a timeout exception.
+    retries = 0
+    while retries < max_retries:
+        try:
+            tqdm.write(f"Copying file at {link} to drafts...")
+            driver.get(link)
+            break
+        except TimeoutException:
+            retries += 1
+            tqdm.write(f"TimeoutException encountered. Retrying {retries}/{max_retries}...")
+            if retries == max_retries:
+                tqdm.write(f"Failed to load {link} after {max_retries} retries. Skipping...")
+                return err_timeout_code
+            time.sleep(1)
+
+
+    time.sleep(0.5)  # Add a short sleep duration before locating the button
 
     tqdm.write(f"Locating the copy button...")
     try:
@@ -165,12 +220,13 @@ def copy_file(driver, link):
         # this could be beause the file is a paid file
         tqdm.write(f"Unable to locate the copy button. Skipping...")
         return
-
-    # Use ActionChains to click the button
-    actions = ActionChains(driver)
-    actions.move_to_element(copy_button)
-    actions.click(copy_button)
-    actions.perform()
+    
+    # Click the copy button
+    try:
+        copy_button.click()
+    except StaleElementReferenceException:
+        tqdm.write(f"StaleElementReferenceException encountered. Retrying...")
+        return copy_file(driver, link)
 
     # Check for the presence of the authentication iframe
     try:
@@ -213,6 +269,7 @@ def copy_file(driver, link):
     except:
         tqdm.write(f"Failed to copy the file at {link}")
         return False
+
 
 
 if __name__ == "__main__":
