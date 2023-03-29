@@ -211,11 +211,16 @@ def copy_file(driver, link, max_retries=3):
 
     tqdm.write(f"Locating the copy button...")
     try:
-        copy_button = WebDriverWait(driver, 5).until(
+        duplicate_button = WebDriverWait(driver, 3).until(
             EC.presence_of_element_located(
-                (By.XPATH, '//button/div[contains(text(), "Get a copy")]'))
+            # locate the button with attribute data-testid="community-duplicate-button"
+                (By.XPATH, '//button[@data-testid="community-duplicate-button"]'))
         )
-        tqdm.write(f"'Get a Copy' button located")
+        # if above changes in the future, try the following
+        # (By.XPATH, '//button/div[contains(text(), "Get a copy")]'))
+        # (By.XPATH, '//button/div[contains(text(), "Open in Figma")]'))
+
+        tqdm.write(f"'Get a Copy' / 'Open in Figma' button located")
     except:
         # this could be beause the file is a paid file
         tqdm.write(f"Unable to locate the copy button. Skipping...")
@@ -223,7 +228,7 @@ def copy_file(driver, link, max_retries=3):
     
     # Click the copy button
     try:
-        copy_button.click()
+        duplicate_button.click()
     except StaleElementReferenceException:
         tqdm.write(f"StaleElementReferenceException encountered. Retrying...")
         return copy_file(driver, link)
