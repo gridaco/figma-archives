@@ -3,3 +3,4 @@ scrapy
 webdriver-manager
 click
 tqdm
+requests
