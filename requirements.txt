@@ -4,3 +4,5 @@ webdriver-manager
 click
 tqdm
 requests
+backoff
+urllib3
