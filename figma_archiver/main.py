@@ -65,7 +65,7 @@ def save_file_locally(file, token, dir):
     }
 
     response = requests.get(
-        f"{FIGMA_API_BASE_URL}/{file}", headers=headers)
+        f"{FIGMA_API_BASE_URL}/{file}?geometry=paths", headers=headers)
 
     if response.status_code == 200:
         json_data = response.json()
