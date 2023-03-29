@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import sys
 import time
 from pathlib import Path
 from dotenv import load_dotenv
@@ -29,20 +30,22 @@ def save_file_locally(args):
         "X-Figma-Token": figma_token
     }
 
-    response = requests.get(
-        f"{FIGMA_API_BASE_URL}/{file_key}", headers=headers)
+    try:
+        response = requests.get(
+            f"{FIGMA_API_BASE_URL}/{file_key}", headers=headers)
 
-    if response.status_code == 200:
-        json_data = response.json()
-        with open(output_path / f"{file_key}.json", "w") as output_file:
-            json.dump(json_data, output_file, indent=2)
-    elif response.status_code == 429:
-        retry_after = int(response.headers.get("Retry-After", 60))
-        time.sleep(retry_after)
-        return save_file_locally((file_key, figma_token, output_path))
-    else:
-        tqdm.write(
-            f"Failed to download file {file_key}. Error: {response.status_code}")
+        if response.status_code == 200:
+            json_data = response.json()
+            with open(output_path / f"{file_key}.json", "w") as output_file:
+                json.dump(json_data, output_file, indent=4)
+        elif response.status_code == 429:
+            retry_after = int(response.headers.get("Retry-After", 60))
+            time.sleep(retry_after)
+            return save_file_locally((file_key, figma_token, output_path))
+        else:
+            return f"Failed to download file {file_key}. Error: {response.status_code}"
+    except Exception as e:
+        return f"Failed to download file {file_key}. Error: {e}"
 
 
 @click.command()
@@ -52,7 +55,8 @@ def save_file_locally(args):
 @click.option("-c", "--concurrency", help="Number of concurrent processes.", default=cpu_count(), type=int)
 def main(figma_file_id, figma_token, output_dir, concurrency):
     if not figma_token:
-        print("Please set the FIGMA_ACCESS_TOKEN environment variable or provide it with the -t option.")
+        print(
+            "Please set the FIGMA_ACCESS_TOKEN environment variable or provide it with the -t option.")
         exit(1)
 
     output_path = Path(output_dir)
@@ -73,9 +77,22 @@ def main(figma_file_id, figma_token, output_dir, concurrency):
     file_keys_to_download = [
         file_key for file_key in file_keys if file_key not in existing_files]
 
-    with Pool(concurrency) as pool:
-        list(tqdm(pool.imap_unordered(save_file_locally, [(file_key, figma_token, output_path) for file_key in file_keys_to_download]), total=len(
-            file_keys_to_download), desc="Downloading Figma files"))
+    tqdm.write(
+        f'archiving {len(file_keys_to_download)} files with {concurrency} processes')
+    try:
+
+        with Pool(concurrency) as pool:
+            results = list(tqdm(pool.imap_unordered(save_file_locally, [(file_key, figma_token, output_path) for file_key in file_keys_to_download]), total=len(
+                file_keys_to_download), desc="Downloading Figma files"))
+    except KeyboardInterrupt:
+        print("\nInterrupted by user. Terminating...")
+        pool.terminate()
+        pool.join()
+        sys.exit(1)
+
+    for result in results:
+        if isinstance(result, str) and result.startswith("Failed"):
+            print(result)
 
 
 if __name__ == "__main__":
