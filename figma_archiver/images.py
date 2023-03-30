@@ -229,11 +229,14 @@ def main(dir, format, scale, depth, skip_canvas, figma_token, source_dir):
             try:
               with open(json_file, "r") as file:
                 file_data = json.load(file)
-            
-                
 
               if depth is not None:
                   depth = int(depth)
+
+              # fetch and save thumbnail (if not already downloaded)
+              if not (subdir / "thumbnail.png").is_file():
+                thumbnail_url = file_data["thumbnailUrl"]
+                download_image(thumbnail_url, subdir / "thumbnail.png")
 
               node_ids = get_node_ids(
                   file_data, depth=depth, skip_canvas=skip_canvas)
