@@ -22,7 +22,10 @@ load_dotenv()
 API_BASE_URL = "https://api.figma.com/v1"
 
 
-def log_error(msg):
+def log_error(msg, print=True):
+    if print:
+        tqdm.write(msg)
+
     # check if err log file exists
     err_log_file = Path("err.log")
     if not err_log_file.exists():
@@ -32,6 +35,7 @@ def log_error(msg):
     
     with open(err_log_file, "a") as f:
         f.write(msg + "\n")
+        f.close()
 
 
 
@@ -155,10 +159,11 @@ def fetch_node_images(file_key, ids, scale, format, token):
         "format": format,
     }
 
-    def chunk(ids, url=url, params=params, max_len=8000):
+    # figma server allows up to 5000 characters in the url (between 4000 ~ 6000 characters)
+    def chunk(ids, url=url, params=params, max_len=5000):
         """
         chunk the ids for the api call to avoid the url max length limit.
-        most browsers have a limit of 2048 characters, but for this case, it is safe to increase it to 8000
+        most browsers have a limit of 2048 characters, but for this case, it is safe to increase it to 4000
         use the url and params info to calculate the length of the api call
         the chunked ids will be formatted as id1,id2,id3
         """
@@ -247,9 +252,10 @@ def fetch_node_images(file_key, ids, scale, format, token):
 @click.option("-s", '--scale', default="1", help="Image scale")
 @click.option("-d", '--depth',  default=None, help="Layer depth to go recursively", type=click.INT)
 @click.option('--skip-canvas',  default=True, help="Skips the canvas while exporting images")
+@click.option('--no-fills',  default=False, help="Skips the download for Image fills")
 @click.option("-t", "--figma-token", help="Figma API access token.", default=os.getenv("FIGMA_ACCESS_TOKEN"), type=str)
 @click.option("-src", '--source-dir', default="./downloads/*.json", help="Path to the JSON file")
-def main(dir, format, scale, depth, skip_canvas, figma_token, source_dir):
+def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_dir):
     root_dir = Path(dir)
 
     _src_dir = Path('/'.join(source_dir.split("/")[0:-1]))   # e.g. ./downloads
@@ -270,10 +276,21 @@ def main(dir, format, scale, depth, skip_canvas, figma_token, source_dir):
             try:
               with open(json_file, "r") as file:
                 file_data = json.load(file)
+            except json.decoder.JSONDecodeError as e:
+              tqdm.write(f"Error loading {json_file} Skipping... (Malformed JSON file)) - error: {e.msg} {e.args}")
 
+              # read the json file and print the start and end of it for debugging
+              with open(json_file, "r") as file:
+                    txt = file.read()
+                    _first_few = txt[0: 100]
+                    _last_few = txt[-100:]
+                    tqdm.write(f"First few characters: \n{_first_few}")
+                    tqdm.write(f"Last few characters: \n{_last_few}")
+                    json.loads(txt)
+
+            if file_data:
               if depth is not None:
                   depth = int(depth)
-
               # fetch and save thumbnail (if not already downloaded)
               if not (subdir / "thumbnail.png").is_file():
                 thumbnail_url = file_data["thumbnailUrl"]
@@ -284,22 +301,23 @@ def main(dir, format, scale, depth, skip_canvas, figma_token, source_dir):
                   file_data, depth=depth, skip_canvas=skip_canvas)
               # ----------------------------------------------------------------------
               # image fills
-              images_dir = subdir / "images"
-              images_dir.mkdir(parents=True, exist_ok=True)
-              existing_images = os.listdir(images_dir)
+              if not no_fills:
+                images_dir = subdir / "images"
+                images_dir.mkdir(parents=True, exist_ok=True)
+                existing_images = os.listdir(images_dir)
 
-              # TODO: this is not safe. the image fills still can be not complete if we terminate during the download
-              # Fetch and save image fills (B)
-              if not any(not re.match(r"\d+:\d+", img) for img in existing_images):
-                  tqdm.write("Fetching image fills...")
-                  image_fills = fetch_file_images(key, token=figma_token)
-                  url_and_path_pairs = [
-                      (url, os.path.join(images_dir, f"{hash_}.{format}"))
-                      for hash_, url in image_fills.items()
-                  ]
-                  fetch_and_save_images(url_and_path_pairs, position=7)
-              else:
-                  tqdm.write("Image fills already fetched")
+                # TODO: this is not safe. the image fills still can be not complete if we terminate during the download
+                # Fetch and save image fills (B)
+                if not any(not re.match(r"\d+:\d+", img) for img in existing_images):
+                    tqdm.write("Fetching image fills...")
+                    image_fills = fetch_file_images(key, token=figma_token)
+                    url_and_path_pairs = [
+                        (url, os.path.join(images_dir, f"{hash_}.{format}"))
+                        for hash_, url in image_fills.items()
+                    ]
+                    fetch_and_save_images(url_and_path_pairs, position=7)
+                else:
+                    tqdm.write("Image fills already fetched")
 
               # ----------------------------------------------------------------------
               # bakes
@@ -335,8 +353,8 @@ def main(dir, format, scale, depth, skip_canvas, figma_token, source_dir):
                   tqdm.write("Layer images already fetched")
 
               tqdm.write("All images fetched and saved successfully")
-            except json.decoder.JSONDecodeError as e:
-              tqdm.write(f"Error loading {json_file} Skipping... (Malformed JSON file))")
+            else:
+              tqdm.write(f"Skipping directory {subdir}: JSON file is empty")
 
         else:
             tqdm.write(
