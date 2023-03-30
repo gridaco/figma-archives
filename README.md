@@ -6,6 +6,8 @@ Figma Files Scraper for Research &amp; Studies
 
 ![figma-scraper demo](./docs/demo.gif)
 
+*Demo of step 2 ~ 4 running concurrently*
+
 ## Usage
 
 This scraper is a combination of
