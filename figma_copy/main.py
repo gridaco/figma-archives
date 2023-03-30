@@ -197,7 +197,12 @@ def copy_file(driver, link, max_retries=3):
         try:
             tqdm.write(f"Copying file at {link} to drafts...")
             driver.get(link)
-            break
+            # use header element to determin fi the page is loaded, since the page load strategy is none
+            WebDriverWait(driver, 15).until(
+                    EC.presence_of_element_located(
+                        (By.XPATH, '//header'))
+            )
+            
         except TimeoutException:
             retries += 1
             tqdm.write(f"TimeoutException encountered. Retrying {retries}/{max_retries}...")
@@ -207,11 +212,12 @@ def copy_file(driver, link, max_retries=3):
             time.sleep(1)
 
 
-    time.sleep(0.5)  # Add a short sleep duration before locating the button
+
+
 
     tqdm.write(f"Locating the copy button...")
     try:
-        duplicate_button = WebDriverWait(driver, 3).until(
+        duplicate_button = WebDriverWait(driver, 1).until(
             EC.presence_of_element_located(
             # locate the button with attribute data-testid="community-duplicate-button"
                 (By.XPATH, '//button[@data-testid="community-duplicate-button"]'))
