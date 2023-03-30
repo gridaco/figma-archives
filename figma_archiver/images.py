@@ -21,6 +21,20 @@ load_dotenv()
 API_BASE_URL = "https://api.figma.com/v1"
 
 
+def log_error(msg):
+    # check if err log file exists
+    err_log_file = Path("err.log")
+    if not err_log_file.exists():
+        with open(err_log_file, "w") as f:
+            f.write("")
+            f.close()
+    
+    with open(err_log_file, "a") as f:
+        f.write(msg + "\n")
+
+
+
+
 def read_file_data(file_key):
     with open(os.path.join(file_key, f"{file_key}.json")) as f:
         return json.load(f)
@@ -168,9 +182,10 @@ def fetch_node_images(file_key, ids, scale, format, token):
 
         data = response.json()
         if "err" in data and data["err"]:
-            raise ValueError(
-                f"Error fetching {len(chunk)} layer images", data["err"]
-            )
+            # ignore and report error
+            msg = f"Error fetching {len(chunk)} layer images [{','.join(chunk)}], e:{data['err']}"
+            log_error(msg)
+            return {}
         return data["images"]
 
     max_concurrent_requests = 10
