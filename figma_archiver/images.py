@@ -162,7 +162,11 @@ def fetch_node_images(file_key, ids, scale, format, token):
 
     def fetch_images_chunk(chunk, retry=0):
         params["ids"] = ",".join(chunk)
-        response = requests.get(url, headers=headers, params=params)
+        try:
+            response = requests.get(url, headers=headers, params=params)
+        except requests.exceptions.ConnectionError as e:
+            log_error(f"Error fetching {len(chunk)} layer images [{','.join(chunk)}], e:{e}")
+            return {}
 
         if response.status_code == 429:
             if retry >= max_retry:
