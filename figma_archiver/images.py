@@ -7,14 +7,15 @@ import os
 import re
 import requests
 from requests.adapters import HTTPAdapter
-from urllib3.util import Retry
+from urllib.parse import urlencode
+from urllib3 import Retry
 import backoff
 from ssl import SSLError
 from pathlib import Path
 from dotenv import load_dotenv
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from itertools import chain
+
 
 load_dotenv()
 
@@ -118,16 +119,17 @@ def download_image(url, output_path, timeout=10):
         return None, None
 
 
-def fetch_and_save_images(url_and_path_pairs, num_threads=20):
+def fetch_and_save_images(url_and_path_pairs, position=0, num_threads=20):
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
         futures = {executor.submit(download_image, url, path): (url, path) for url, path in url_and_path_pairs}
 
-        for future in tqdm(as_completed(futures), total=len(futures), desc=f"Downloading images (Utilizing {num_threads} threads)", position=1, leave=False):
+        for future in tqdm(as_completed(futures), total=len(futures), desc=f"Downloading images (Utilizing {num_threads} threads)", position=position, leave=False):
             url, downloaded_path = future.result()
             if downloaded_path:
                 tqdm.write(f"Downloaded {url} to local directory {downloaded_path}")
             else:
                 tqdm.write(f"Failed to download image: {url}")
+
 
 
 
@@ -144,13 +146,6 @@ def fetch_file_images(file_key, token):
 
 
 def fetch_node_images(file_key, ids, scale, format, token):
-    max_retry = 3
-    delay_between_429 = 10
-    ids_chunk_size = 50
-    ids_chunks = [
-        ids[i: i + ids_chunk_size] for i in range(0, len(ids), ids_chunk_size)
-    ]
-
     url = f"{API_BASE_URL}/images/{file_key}"
     headers = {"X-FIGMA-TOKEN": token}
     params = {
@@ -159,6 +154,31 @@ def fetch_node_images(file_key, ids, scale, format, token):
         "scale": scale,
         "format": format,
     }
+
+    def chunk(ids, url=url, params=params, max_len=8000):
+        """
+        chunk the ids for the api call to avoid the url max length limit.
+        most browsers have a limit of 2048 characters, but for this case, it is safe to increase it to 8000
+        use the url and params info to calculate the length of the api call
+        the chunked ids will be formatted as id1,id2,id3
+        """
+
+        def get_chunk_len(chunk):
+            return len(url) + len(",".join(chunk)) + len(urlencode(params))
+
+        chunk = []
+        for id_ in ids:
+            if get_chunk_len(chunk + [id_]) > max_len:
+                yield chunk
+                chunk = []
+            chunk.append(id_)
+        yield chunk
+
+
+    max_retry = 3
+    delay_between_429 = 10
+    ids_chunks = list(chunk(ids))
+
 
     def fetch_images_chunk(chunk, retry=0):
         params["ids"] = ",".join(chunk)
@@ -196,21 +216,23 @@ def fetch_node_images(file_key, ids, scale, format, token):
         f"Fetching {len(ids)} layer images in {len(ids_chunks)} chunks, with {num_batches} batches...")
 
     image_urls = {}
-    for batch_idx in tqdm(range(num_batches), desc="Batches", position=5, leave=False):
-        start_idx = batch_idx * max_concurrent_requests
-        end_idx = start_idx + max_concurrent_requests
-        batch_chunks = ids_chunks[start_idx:end_idx]
+    with tqdm(range(num_batches), desc="Batches", position=2, leave=False) as pbar:
+        for batch_idx in pbar:
+            pbar.set_description(f"Batch {batch_idx + 1}/{num_batches}")
+            start_idx = batch_idx * max_concurrent_requests
+            end_idx = start_idx + max_concurrent_requests
+            batch_chunks = ids_chunks[start_idx:end_idx]
 
-        with ThreadPoolExecutor(max_workers=max_concurrent_requests) as executor:
-            results = [result for result in tqdm(executor.map(
-                fetch_images_chunk, batch_chunks), desc=f"Batch {batch_idx}", position=4, leave=False)]
-            for chunk_result in results:
-                image_urls.update(chunk_result)
+            with ThreadPoolExecutor(max_workers=max_concurrent_requests) as executor:
+                results = [result for result in tqdm(executor.map(
+                    fetch_images_chunk, batch_chunks), desc=f"Batch {batch_idx}", position=1, leave=False, total=len(batch_chunks))]
+                for chunk_result in results:
+                    image_urls.update(chunk_result)
 
-        if batch_idx < num_batches - 1:
-            tqdm.write(
-                f"Entry {batch_idx + 1 + 1}/{num_batches}: Waiting {delay_between_batches} seconds before next batch...")
-            time.sleep(delay_between_batches)
+            if batch_idx < num_batches - 1:
+                pbar.set_description(
+                    f"Entry {batch_idx + 1 + 1}/{num_batches}: Waiting {delay_between_batches} seconds before next batch...")
+                time.sleep(delay_between_batches)
 
     return image_urls
 
@@ -271,7 +293,7 @@ def main(dir, format, scale, depth, skip_canvas, figma_token, source_dir):
                       (url, os.path.join(images_dir, f"{hash_}.{format}"))
                       for hash_, url in image_fills.items()
                   ]
-                  fetch_and_save_images(url_and_path_pairs)
+                  fetch_and_save_images(url_and_path_pairs, position=7)
               else:
                   tqdm.write("Image fills already fetched")
 
@@ -304,7 +326,7 @@ def main(dir, format, scale, depth, skip_canvas, figma_token, source_dir):
                       )
                       for node_id, url in layer_images.items()
                   ]
-                  fetch_and_save_images(url_and_path_pairs)
+                  fetch_and_save_images(url_and_path_pairs, position=8)
               else:
                   tqdm.write("Layer images already fetched")
 
