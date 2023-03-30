@@ -1,4 +1,4 @@
-# figma-scraper
+# Public Figma Community Files Archives
 
 Figma Files Scraper for Research &amp; Studies
 
