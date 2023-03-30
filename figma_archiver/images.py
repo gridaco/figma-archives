@@ -24,7 +24,10 @@ API_BASE_URL = "https://api.figma.com/v1"
 def log_error(msg):
     # check if err log file exists
     err_log_file = Path("err.log")
-    err_log_file.mkdir(exist_ok=True)
+    if not err_log_file.exists():
+        with open(err_log_file, "w") as f:
+            f.write("")
+            f.close()
     
     with open(err_log_file, "a") as f:
         f.write(msg + "\n")
