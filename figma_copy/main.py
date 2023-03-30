@@ -197,13 +197,28 @@ def copy_file(driver, link, max_retries=3):
         try:
             tqdm.write(f"Copying file at {link} to drafts...")
             driver.get(link)
+            time.sleep(0.1)
+
+
             # use header element to determin fi the page is loaded, since the page load strategy is none
-            WebDriverWait(driver, 15).until(
+            WebDriverWait(driver, 5).until(
                     EC.presence_of_element_located(
                         (By.XPATH, '//header'))
             )
-            
+            break
+
         except TimeoutException:
+            try:
+                # check if 404
+                WebDriverWait(driver, 1).until(
+                    EC.presence_of_element_located((By.XPATH, '//h2[text()="The page you are looking for can\'t be found."]'))
+                )
+
+                tqdm.write(f"404 encountered. Skipping...")
+                return False
+            except TimeoutException:
+                pass
+
             retries += 1
             tqdm.write(f"TimeoutException encountered. Retrying {retries}/{max_retries}...")
             if retries == max_retries:
