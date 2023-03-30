@@ -1,10 +1,12 @@
-# Public Figma Community Files Archives
+# Public Figma Community Files Archive
 
 Figma Files Scraper for Research &amp; Studies
 
 ## Demo
 
 ![figma-scraper demo](./docs/demo.gif)
+
+*Demo of step 2 ~ 4 running concurrently*
 
 ## Usage
 
