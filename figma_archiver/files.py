@@ -113,20 +113,20 @@ def main(figma_file_id, figma_token, output_dir, concurrency, validate):
             results = list(tqdm(pool.imap_unordered(save_file_locally, [(file_key, figma_token, output_path, validate) for file_key in file_keys_to_download]), total=len(
                 file_keys_to_download), desc="Downloading Figma files"))
     except KeyboardInterrupt:
-        print("\nInterrupted by user. Terminating...")
+        tqdm.write("\nInterrupted by user. Terminating...")
         pool.terminate()
         pool.join()
         sys.exit(1)
     
     if validate:
-      for file in output_path.glob("*.json"):
+      for file in tqdm(output_path.glob("*.json"), desc="Validation"):
           if not is_valid_json_file(file):
-            print(f"Failed to validate json file properly {file}. Malformed json.")
+            tqdm.write(f"Failed to validate json file properly {file}. Malformed json. Unlinking...")
             file.unlink()
 
     for result in results:
         if isinstance(result, str) and result.startswith("Failed"):
-            print(result)
+            tqdm.write(result)
 
 
 if __name__ == "__main__":
