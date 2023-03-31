@@ -22,6 +22,120 @@ load_dotenv()
 API_BASE_URL = "https://api.figma.com/v1"
 
 
+@click.command()
+@click.option("-dir", default="./downloads", type=click.Path(exists=True), help="Image format to bake the layers")
+@click.option("-fmt", '--format',  default="png", help="Image format to bake the layers")
+@click.option("-s", '--scale', default="1", help="Image scale")
+@click.option("-d", '--depth',  default=None, help="Layer depth to go recursively", type=click.INT)
+@click.option('--skip-canvas',  default=True, help="Skips the canvas while exporting images")
+@click.option('--no-fills',  default=False, help="Skips the download for Image fills")
+@click.option("-t", "--figma-token", help="Figma API access token.", default=os.getenv("FIGMA_ACCESS_TOKEN"), type=str)
+@click.option("-src", '--source-dir', default="./downloads/*.json", help="Path to the JSON file")
+def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_dir):
+    root_dir = Path(dir)
+
+    _src_dir = Path('/'.join(source_dir.split("/")[0:-1]))   # e.g. ./downloads
+    _src_file_pattern = source_dir.split("/")[-1]            # e.g. *.json
+    json_files = glob.glob(_src_file_pattern, root_dir=_src_dir)
+    file_keys = [Path(file).stem for file in json_files]
+
+    for key, json_file in tqdm(zip(file_keys, json_files), desc="Directories", position=10, leave=True, total=len(file_keys)):
+
+        subdir = root_dir / key
+        subdir.mkdir(parents=True, exist_ok=True)
+
+        json_file = _src_dir / Path(json_file)
+
+        if json_file.is_file():
+            tqdm.write(f"Processing directory {subdir}")
+
+            try:
+              with open(json_file, "r") as file:
+                file_data = json.load(file)
+            except json.decoder.JSONDecodeError as e:
+              tqdm.write(f"Error loading {json_file} Skipping... (Malformed JSON file)) - error: {e.msg} {e.args}")
+
+              # read the json file and print the start and end of it for debugging
+              with open(json_file, "r") as file:
+                    txt = file.read()
+                    _first_few = txt[0: 100]
+                    _last_few = txt[-100:]
+                    tqdm.write(f"First few characters: \n{_first_few}")
+                    tqdm.write(f"Last few characters: \n{_last_few}")
+
+            if file_data:
+              if depth is not None:
+                  depth = int(depth)
+              # fetch and save thumbnail (if not already downloaded)
+              if not (subdir / "thumbnail.png").is_file():
+                thumbnail_url = file_data["thumbnailUrl"]
+                download_image(thumbnail_url, subdir / "thumbnail.png")
+                tqdm.write(f"Saved thumbnail to {subdir / 'thumbnail.png'}")
+
+              node_ids = get_node_ids(
+                  file_data, depth=depth, skip_canvas=skip_canvas)
+              # ----------------------------------------------------------------------
+              # image fills
+              if not no_fills:
+                images_dir = subdir / "images"
+                images_dir.mkdir(parents=True, exist_ok=True)
+                existing_images = os.listdir(images_dir)
+
+                # TODO: this is not safe. the image fills still can be not complete if we terminate during the download
+                # Fetch and save image fills (B)
+                if not any(not re.match(r"\d+:\d+", img) for img in existing_images):
+                    tqdm.write("Fetching image fills...")
+                    image_fills = fetch_file_images(key, token=figma_token)
+                    url_and_path_pairs = [
+                        (url, os.path.join(images_dir, f"{hash_}.{format}"))
+                        for hash_, url in image_fills.items()
+                    ]
+                    fetch_and_save_images(url_and_path_pairs, position=7)
+                else:
+                    tqdm.write("Image fills already fetched")
+
+              # ----------------------------------------------------------------------
+              # bakes
+              images_dir = subdir / "bakes"
+              images_dir.mkdir(parents=True, exist_ok=True)
+              existing_images = os.listdir(images_dir)
+
+              # Fetch and save layer images (A)
+              node_ids_to_fetch = [
+                  node_id
+                  for node_id in node_ids
+                  if f"{node_id}.{format}" not in existing_images
+                  and f"{node_id}@{scale}x.{format}" not in existing_images
+              ]
+
+              if node_ids_to_fetch:
+                  tqdm.write(
+                      f"Fetching {len(node_ids_to_fetch)} of {len(node_ids)} layer images...")
+                  layer_images = fetch_node_images(
+                      key, node_ids_to_fetch, scale, format, token=figma_token)
+                  url_and_path_pairs = [
+                      (
+                          url,
+                          os.path.join(
+                              images_dir,
+                              f"{node_id}{'@' + str(scale) + 'x' if scale != '1' else ''}.{format}",
+                          ),
+                      )
+                      for node_id, url in layer_images.items()
+                  ]
+                  fetch_and_save_images(url_and_path_pairs, position=8)
+              else:
+                  tqdm.write("Layer images already fetched")
+
+              tqdm.write("All images fetched and saved successfully")
+            else:
+              tqdm.write(f"Skipping directory {subdir}: JSON file is empty")
+
+        else:
+            tqdm.write(
+                f"Skipping directory {subdir}: JSON file not found at '{json_file}'")
+
+
 def log_error(msg, print=True):
     if print:
         tqdm.write(msg)
@@ -36,8 +150,6 @@ def log_error(msg, print=True):
     with open(err_log_file, "a") as f:
         f.write(msg + "\n")
         f.close()
-
-
 
 
 def read_file_data(file_key):
@@ -245,119 +357,6 @@ def fetch_node_images(file_key, ids, scale, format, token):
 
     return image_urls
 
-
-@click.command()
-@click.option("-dir", default="./downloads", type=click.Path(exists=True), help="Image format to bake the layers")
-@click.option("-fmt", '--format',  default="png", help="Image format to bake the layers")
-@click.option("-s", '--scale', default="1", help="Image scale")
-@click.option("-d", '--depth',  default=None, help="Layer depth to go recursively", type=click.INT)
-@click.option('--skip-canvas',  default=True, help="Skips the canvas while exporting images")
-@click.option('--no-fills',  default=False, help="Skips the download for Image fills")
-@click.option("-t", "--figma-token", help="Figma API access token.", default=os.getenv("FIGMA_ACCESS_TOKEN"), type=str)
-@click.option("-src", '--source-dir', default="./downloads/*.json", help="Path to the JSON file")
-def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_dir):
-    root_dir = Path(dir)
-
-    _src_dir = Path('/'.join(source_dir.split("/")[0:-1]))   # e.g. ./downloads
-    _src_file_pattern = source_dir.split("/")[-1]            # e.g. *.json
-    json_files = glob.glob(_src_file_pattern, root_dir=_src_dir)
-    file_keys = [Path(file).stem for file in json_files]
-
-    for key, json_file in tqdm(zip(file_keys, json_files), desc="Directories", position=10, leave=True, total=len(file_keys)):
-
-        subdir = root_dir / key
-        subdir.mkdir(parents=True, exist_ok=True)
-
-        json_file = _src_dir / Path(json_file)
-
-        if json_file.is_file():
-            tqdm.write(f"Processing directory {subdir}")
-
-            try:
-              with open(json_file, "r") as file:
-                file_data = json.load(file)
-            except json.decoder.JSONDecodeError as e:
-              tqdm.write(f"Error loading {json_file} Skipping... (Malformed JSON file)) - error: {e.msg} {e.args}")
-
-              # read the json file and print the start and end of it for debugging
-              with open(json_file, "r") as file:
-                    txt = file.read()
-                    _first_few = txt[0: 100]
-                    _last_few = txt[-100:]
-                    tqdm.write(f"First few characters: \n{_first_few}")
-                    tqdm.write(f"Last few characters: \n{_last_few}")
-
-            if file_data:
-              if depth is not None:
-                  depth = int(depth)
-              # fetch and save thumbnail (if not already downloaded)
-              if not (subdir / "thumbnail.png").is_file():
-                thumbnail_url = file_data["thumbnailUrl"]
-                download_image(thumbnail_url, subdir / "thumbnail.png")
-                tqdm.write(f"Saved thumbnail to {subdir / 'thumbnail.png'}")
-
-              node_ids = get_node_ids(
-                  file_data, depth=depth, skip_canvas=skip_canvas)
-              # ----------------------------------------------------------------------
-              # image fills
-              if not no_fills:
-                images_dir = subdir / "images"
-                images_dir.mkdir(parents=True, exist_ok=True)
-                existing_images = os.listdir(images_dir)
-
-                # TODO: this is not safe. the image fills still can be not complete if we terminate during the download
-                # Fetch and save image fills (B)
-                if not any(not re.match(r"\d+:\d+", img) for img in existing_images):
-                    tqdm.write("Fetching image fills...")
-                    image_fills = fetch_file_images(key, token=figma_token)
-                    url_and_path_pairs = [
-                        (url, os.path.join(images_dir, f"{hash_}.{format}"))
-                        for hash_, url in image_fills.items()
-                    ]
-                    fetch_and_save_images(url_and_path_pairs, position=7)
-                else:
-                    tqdm.write("Image fills already fetched")
-
-              # ----------------------------------------------------------------------
-              # bakes
-              images_dir = subdir / "bakes"
-              images_dir.mkdir(parents=True, exist_ok=True)
-              existing_images = os.listdir(images_dir)
-
-              # Fetch and save layer images (A)
-              node_ids_to_fetch = [
-                  node_id
-                  for node_id in node_ids
-                  if f"{node_id}.{format}" not in existing_images
-                  and f"{node_id}@{scale}x.{format}" not in existing_images
-              ]
-
-              if node_ids_to_fetch:
-                  tqdm.write(
-                      f"Fetching {len(node_ids_to_fetch)} of {len(node_ids)} layer images...")
-                  layer_images = fetch_node_images(
-                      key, node_ids_to_fetch, scale, format, token=figma_token)
-                  url_and_path_pairs = [
-                      (
-                          url,
-                          os.path.join(
-                              images_dir,
-                              f"{node_id}{'@' + str(scale) + 'x' if scale != '1' else ''}.{format}",
-                          ),
-                      )
-                      for node_id, url in layer_images.items()
-                  ]
-                  fetch_and_save_images(url_and_path_pairs, position=8)
-              else:
-                  tqdm.write("Layer images already fetched")
-
-              tqdm.write("All images fetched and saved successfully")
-            else:
-              tqdm.write(f"Skipping directory {subdir}: JSON file is empty")
-
-        else:
-            tqdm.write(
-                f"Skipping directory {subdir}: JSON file not found at '{json_file}'")
 
 
 if __name__ == "__main__":
