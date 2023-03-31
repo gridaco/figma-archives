@@ -210,11 +210,12 @@ def image_queue_handler(img_queue: queue.Queue, batch=20, timeout=1800):
                 url, path = img_queue.get(timeout=1)
                 if url == 'EOD':  # Check for sentinel value ('EOD', 'EOD')
                     break
-
-                items_to_process.append((url, path))
-                total += 1
-                progress.desc = f"[QUEUED] Images (total: {total} batch: {len(items_to_process)}/{batch})"
-                batch_start_time = time.time()  # Update the batch start time
+                
+                if url is not None:
+                  items_to_process.append((url, path))
+                  total += 1
+                  progress.desc = f"[QUEUED] Images (total: {total} batch: {len(items_to_process)}/{batch})"
+                  batch_start_time = time.time()  # Update the batch start time
             except queue.Empty:
                 if time.time() > timeout_time:
                     tqdm.write("⏰ Image Archiving Timed Out")
