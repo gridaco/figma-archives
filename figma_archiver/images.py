@@ -351,9 +351,8 @@ def fetch_node_images(file_key, ids, scale, format, token, position):
 
         if response.status_code == 429:
             if retry >= max_retry:
-                raise ValueError(
-                    f"Error fetching {len(chunk)} layer images. Rate limit exceeded."
-                )
+                log_error(f"Error fetching [{(','.join(chunk))}] layer images. Rate limit exceeded.")
+                return {}
 
             # check if retry-after header is present
             retry_after = response.headers.get("retry-after")
