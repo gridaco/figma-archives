@@ -162,7 +162,7 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
           if node_ids_to_fetch:
               # tqdm.write(f"Fetching {len(node_ids_to_fetch)} of {len(node_ids)} layer images...")
               layer_images = fetch_node_images(
-                  key, node_ids_to_fetch, scale, format, token=figma_token, position=BOTTOM_POSITION-(concurrency+index+5))
+                  key, node_ids_to_fetch, scale, format, token=figma_token, position=BOTTOM_POSITION-(concurrency+index+5), conncurrency=concurrency)
               url_and_path_pairs = [
                   (
                       url,
@@ -238,7 +238,7 @@ def image_queue_handler(img_queue: queue.Queue, batch=64, timeout=1800):
         timeout_time = batch_start_time + timeout
         url = None
 
-        progress = tqdm(total=batch, desc=f"📭 (total: {total})", position=BOTTOM_POSITION-2, leave=False)
+        progress = tqdm(total=batch, desc=f"📭 ({total}/{total+img_queue.qsize()})", position=BOTTOM_POSITION-2, leave=False)
 
         while len(items_to_process) < batch:
             try:
@@ -249,7 +249,7 @@ def image_queue_handler(img_queue: queue.Queue, batch=64, timeout=1800):
                 if url is not None:
                   items_to_process.append((url, path))
                   total += 1
-                  progress.desc = f"📭 (total: {total} batch: {len(items_to_process)}/{batch})"
+                  progress.desc = f"📭 ({total}/{len(items_to_process)}/{batch}/{total}/{total+img_queue.qsize()})"
                   batch_start_time = time.time()  # Update the batch start time
             except queue.Empty:
                 if time.time() > timeout_time:
@@ -302,7 +302,7 @@ def fetch_file_images(file_key, token):
       return {}
 
 
-def fetch_node_images(file_key, ids, scale, format, token, position):
+def fetch_node_images(file_key, ids, scale, format, token, position, conncurrency):
     url = f"{API_BASE_URL}/images/{file_key}"
     headers = {"X-FIGMA-TOKEN": token}
     params = {
@@ -334,7 +334,7 @@ def fetch_node_images(file_key, ids, scale, format, token, position):
 
 
     max_retry = 5
-    delay_between_429 = 10
+    delay_between_429 = (conncurrency * 2) * 5
     ids_chunks = list(chunk(ids))
 
 
@@ -376,7 +376,7 @@ def fetch_node_images(file_key, ids, scale, format, token, position):
             return {}
         return data["images"]
 
-    max_concurrent_requests = 10
+    max_concurrent_requests = conncurrency
     delay_between_batches = 1
     num_batches = -(-len(ids_chunks) // max_concurrent_requests)
 
