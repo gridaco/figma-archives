@@ -197,7 +197,7 @@ def download_image_with_progress_bar(url_path, progress):
     download_image(url, path)
     progress.update(1)
 
-def image_queue_handler(img_queue: queue.Queue, batch=1024, timeout=1800):
+def image_queue_handler(img_queue: queue.Queue, batch=16, timeout=1800):
     total = 0
     while True:
         items_to_process = []
@@ -363,6 +363,13 @@ def fetch_node_images(file_key, ids, scale, format, token):
                 time.sleep(delay_between_batches)
 
     return image_urls
+
+
+def calculate_program():
+    """
+    calculates the stats of the program before starting the loop. this is helpful to show the progress bar.
+    """
+    ...
 
 
 # utils
