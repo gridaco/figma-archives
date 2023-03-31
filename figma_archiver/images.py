@@ -52,6 +52,17 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
     download_thread.start()
 
     # run the main thread loop
+
+    # TODO: utilize the concurrency parameter
+    # chunks = chunk_list(zip(file_keys, json_files), concurrency)
+    # threads = []
+    # for _ in range(concurrency):
+    #   t = threading.Thread(target=process_files, args=(files, img_queue,))
+    #   t.start()
+    #   threads.append(t)
+    # for t in threads:
+    #   t.join()
+
     for key, json_file in tqdm(zip(file_keys, json_files), desc="Directories", position=10, leave=True, total=len(file_keys)):
 
         subdir = root_dir / key
@@ -61,7 +72,7 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
         file_data = read_file_data(json_file)
 
         if file_data:
-          tqdm.write(f"Processing directory {subdir}")
+          tqdm.write(f"{subdir} processing...")
           if depth is not None:
               depth = int(depth)
           # fetch and save thumbnail (if not already downloaded)
@@ -82,7 +93,7 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
             # TODO: this is not safe. the image fills still can be not complete if we terminate during the download
             # Fetch and save image fills (B)
             if not any(not re.match(r"\d+:\d+", img) for img in existing_images):
-                tqdm.write("Fetching image fills...")
+                # tqdm.write("Fetching image fills...")
                 image_fills = fetch_file_images(key, token=figma_token)
                 url_and_path_pairs = [
                     (url, os.path.join(images_dir, f"{hash_}.{format}"))
@@ -90,7 +101,7 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
                 ]
                 fetch_and_save_images(url_and_path_pairs, position=7)
             else:
-                tqdm.write("Image fills already fetched")
+                tqdm.write(f"{images_dir} - Image fills already fetched")
 
           # ----------------------------------------------------------------------
           # bakes
@@ -107,8 +118,7 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
           ]
 
           if node_ids_to_fetch:
-              tqdm.write(
-                  f"Fetching {len(node_ids_to_fetch)} of {len(node_ids)} layer images...")
+              # tqdm.write(f"Fetching {len(node_ids_to_fetch)} of {len(node_ids)} layer images...")
               layer_images = fetch_node_images(
                   key, node_ids_to_fetch, scale, format, token=figma_token)
               url_and_path_pairs = [
@@ -123,15 +133,18 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
               ]
               fetch_and_save_images(url_and_path_pairs, position=8)
           else:
-              tqdm.write("Layer images already fetched")
+              tqdm.write(f"{images_dir} - Layer images already fetched")
 
-          tqdm.write("All images fetched and saved successfully")
+          tqdm.write(f"{subdir} complete.")
         else:
           tqdm.write(
                 f"Skipping directory {subdir}: Valid JSON file not found at '{json_file}'")
 
     # finally wait for the download thread to finish
     download_thread.join()
+
+def process_files(files, image_queue):
+    ...
 
 
 def requests_retry_session(
@@ -208,7 +221,7 @@ def fetch_and_save_images(url_and_path_pairs, position=0, num_threads=20):
         for future in tqdm(as_completed(futures), total=len(futures), desc=f"Downloading images (Utilizing {num_threads} threads)", position=position, leave=False):
             url, downloaded_path = future.result()
             if downloaded_path:
-                tqdm.write(f"Downloaded {url} to local directory {downloaded_path}")
+                tqdm.write(f"☑ {url} → {downloaded_path}")
             else:
                 tqdm.write(f"Failed to download image: {url}")
 
@@ -297,20 +310,15 @@ def fetch_node_images(file_key, ids, scale, format, token):
     delay_between_batches = 5
     num_batches = -(-len(ids_chunks) // max_concurrent_requests)
 
-    tqdm.write(
-        f"Fetching {len(ids)} layer images in {len(ids_chunks)} chunks, with {num_batches} batches...")
-
     image_urls = {}
-    with tqdm(range(num_batches), desc="Batches", position=2, leave=False) as pbar:
+    with tqdm(range(num_batches), desc=f"Fetching ({len(ids)}/{len(ids_chunks)}/{num_batches})", position=2, leave=False) as pbar:
         for batch_idx in pbar:
-            pbar.set_description(f"Batch {batch_idx + 1}/{num_batches}")
             start_idx = batch_idx * max_concurrent_requests
             end_idx = start_idx + max_concurrent_requests
             batch_chunks = ids_chunks[start_idx:end_idx]
 
             with ThreadPoolExecutor(max_workers=max_concurrent_requests) as executor:
-                results = [result for result in tqdm(executor.map(
-                    fetch_images_chunk, batch_chunks), desc=f"Batch {batch_idx}", position=1, leave=False, total=len(batch_chunks))]
+                results = [result for result in executor.map(fetch_images_chunk, batch_chunks)]
                 for chunk_result in results:
                     image_urls.update(chunk_result)
 
@@ -404,6 +412,9 @@ def get_node_ids(data, depth=None, skip_canvas=True):
 
 def get_existing_images(images_dir):
     return set(os.listdir(images_dir))
+
+def chunk_list(input_list, n):
+    return [input_list[i:i + n] for i in range(0, len(input_list), n)]
 
 
 
