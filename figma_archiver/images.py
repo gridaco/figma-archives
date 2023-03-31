@@ -230,6 +230,7 @@ def image_queue_handler(img_queue: queue.Queue, batch=20, timeout=1800):
         if not items_to_process:
             break
 
+        progress.desc = f"[......] Archiving Images.. (total: {total} batch: {len(items_to_process)}/{batch})"
         with ThreadPoolExecutor(max_workers=batch) as executor:
             download_func = partial(download_image_with_progress_bar, progress=progress)
             executor.map(download_func, items_to_process)
