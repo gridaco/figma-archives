@@ -1,5 +1,7 @@
 import glob
 import logging
+from multiprocessing import cpu_count
+import threading
 import click
 import time
 import json
@@ -15,6 +17,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from functools import partial
+import queue
+
 
 
 load_dotenv()
@@ -31,14 +36,22 @@ API_BASE_URL = "https://api.figma.com/v1"
 @click.option('--no-fills',  default=False, help="Skips the download for Image fills")
 @click.option("-t", "--figma-token", help="Figma API access token.", default=os.getenv("FIGMA_ACCESS_TOKEN"), type=str)
 @click.option("-src", '--source-dir', default="./downloads/*.json", help="Path to the JSON file")
-def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_dir):
+@click.option("-c", "--concurrency", help="Number of concurrent processes.", default=cpu_count(), type=int)
+def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_dir, concurrency):
+    img_queue = queue.Queue()
     root_dir = Path(dir)
 
     _src_dir = Path('/'.join(source_dir.split("/")[0:-1]))   # e.g. ./downloads
     _src_file_pattern = source_dir.split("/")[-1]            # e.g. *.json
     json_files = glob.glob(_src_file_pattern, root_dir=_src_dir)
     file_keys = [Path(file).stem for file in json_files]
+    img_queue.put((None, None))  # Add a sentinel value to indicate the end of the queue
 
+
+    download_thread = threading.Thread(target=image_queue_handler, args=(img_queue,))
+    download_thread.start()
+
+    # run the main thread loop
     for key, json_file in tqdm(zip(file_keys, json_files), desc="Directories", position=10, leave=True, total=len(file_keys)):
 
         subdir = root_dir / key
@@ -117,6 +130,9 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
           tqdm.write(
                 f"Skipping directory {subdir}: Valid JSON file not found at '{json_file}'")
 
+    # finally wait for the download thread to finish
+    download_thread.join()
+
 
 def requests_retry_session(
     retries=3,
@@ -152,6 +168,37 @@ def download_image(url, output_path, timeout=10):
     except Exception as e:
         tqdm.write(f"Error downloading {url}: {e}")
         return None, None
+
+def image_queue_handler(img_queue: queue.Queue, batch=20, timeout=300):
+    def download_image_with_progress_bar(url_path, progress):
+        url, path = url_path
+        download_image(url, path)
+        progress.update(1)
+        return
+    
+    progress = tqdm(total=img_queue.qsize(), desc="Archiving Images", position=9)
+
+    while True:
+        items_to_process = []
+        while True:
+            try:
+                url, path = img_queue.get(timeout=timeout)
+                if url is None:
+                    break
+                items_to_process.append((url, path))
+                progress.total += 1
+            except queue.Empty:
+                break
+
+        if not items_to_process:
+            break
+
+        with ThreadPoolExecutor(max_workers=batch) as executor:
+            download_func = partial(download_image_with_progress_bar, progress=progress)
+            executor.map(download_func, items_to_process)
+
+    progress.close()
+    
 
 
 def fetch_and_save_images(url_and_path_pairs, position=0, num_threads=20):
@@ -303,12 +350,14 @@ def read_file_data(file: Path):
           tqdm.write(f"Error loading {file} Skipping... (Malformed JSON file)) - error: {e.msg} {e.args}")
 
           # read the json file and print the start and end of it for debugging
-          with open(file, "r") as file:
-                txt = file.read()
-                _first_few = txt[0: 100]
-                _last_few = txt[-100:]
-                tqdm.write(f"First few characters: \n{_first_few}")
-                tqdm.write(f"Last few characters: \n{_last_few}")
+          try:
+            with open(file, "r") as file:
+                  txt = file.read()
+                  _first_few = txt[0: 100]
+                  _last_few = txt[-100:]
+                  tqdm.write(f"First few characters: \n{_first_few}")
+                  tqdm.write(f"Last few characters: \n{_last_few}")
+          except TypeError as e: ...
           return None
     else:
         tqdm.write(f"File {file} not found")
