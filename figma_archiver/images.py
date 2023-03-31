@@ -70,7 +70,7 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
         file_data = read_file_data(json_file)
 
         if file_data:
-          tqdm.write(f"{subdir} processing...")
+          tqdm.write(f"☐ {subdir}")
           if depth is not None:
               depth = int(depth)
           # fetch and save thumbnail (if not already downloaded)
@@ -101,7 +101,8 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
                 for pair in url_and_path_pairs:
                   img_queue.put(pair)
             else:
-                tqdm.write(f"{images_dir} - Image fills already fetched")
+                ...
+                # tqdm.write(f"{images_dir} - Image fills already fetched")
 
           # ----------------------------------------------------------------------
           # bakes
@@ -134,12 +135,12 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
               for pair in url_and_path_pairs:
                   img_queue.put(pair)
           else:
-              tqdm.write(f"{images_dir} - Layer images already fetched")
+              # tqdm.write(f"{images_dir} - Layer images already fetched")
+              ...
 
-          tqdm.write(f"{subdir} complete.")
+          tqdm.write(f"☑ {subdir}")
         else:
-          tqdm.write(
-                f"Skipping directory {subdir}: Valid JSON file not found at '{json_file}'")
+          tqdm.write(f"☒ {subdir}")
 
     tqdm.write("All done!")
     # Signal the handler to stop by adding a None item
@@ -362,7 +363,7 @@ def fetch_node_images(file_key, ids, scale, format, token):
 
 # utils
 
-def log_error(msg, print=True):
+def log_error(msg, print=False):
     try:
       if print:
           tqdm.write(msg)
