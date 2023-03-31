@@ -37,13 +37,15 @@ API_BASE_URL = "https://api.figma.com/v1"
 @click.option("-t", "--figma-token", help="Figma API access token.", default=os.getenv("FIGMA_ACCESS_TOKEN"), type=str)
 @click.option("-src", '--source-dir', default="./downloads/*.json", help="Path to the JSON file")
 @click.option("-c", "--concurrency", help="Number of concurrent processes.", default=cpu_count(), type=int)
-def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_dir, concurrency):
+@click.option("--skip", help="Number of files to skip (for dubugging).", default=0, type=int)
+def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_dir, concurrency, skip):
     img_queue = queue.Queue()
     root_dir = Path(dir)
 
     _src_dir = Path('/'.join(source_dir.split("/")[0:-1]))   # e.g. ./downloads
     _src_file_pattern = source_dir.split("/")[-1]            # e.g. *.json
     json_files = glob.glob(_src_file_pattern, root_dir=_src_dir)
+    json_files = json_files[skip:]
     file_keys = [Path(file).stem for file in json_files]
 
     download_thread = threading.Thread(target=image_queue_handler, args=(img_queue,))
@@ -77,7 +79,7 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
           if not (subdir / "thumbnail.png").is_file():
             thumbnail_url = file_data["thumbnailUrl"]
             download_image(thumbnail_url, subdir / "thumbnail.png")
-            tqdm.write(f"Saved thumbnail to {subdir / 'thumbnail.png'}")
+            # tqdm.write(f"Saved thumbnail to {subdir / 'thumbnail.png'}")
 
           node_ids = get_node_ids(
               file_data, depth=depth, skip_canvas=skip_canvas)
@@ -195,7 +197,7 @@ def download_image_with_progress_bar(url_path, progress):
     download_image(url, path)
     progress.update(1)
 
-def image_queue_handler(img_queue: queue.Queue, batch=20, timeout=1800):
+def image_queue_handler(img_queue: queue.Queue, batch=1024, timeout=1800):
     total = 0
     while True:
         items_to_process = []
@@ -203,7 +205,7 @@ def image_queue_handler(img_queue: queue.Queue, batch=20, timeout=1800):
         timeout_time = batch_start_time + timeout
         url = None
 
-        progress = tqdm(total=img_queue.qsize(), desc=f"[QUEUED] Images (total: {total})", position=9, leave=False)
+        progress = tqdm(total=batch, desc=f"[QUEUED] Images (total: {total})", position=9, leave=False)
 
         while len(items_to_process) < batch:
             try:
@@ -231,7 +233,7 @@ def image_queue_handler(img_queue: queue.Queue, batch=20, timeout=1800):
         if not items_to_process:
             break
 
-        progress.desc = f"[ARCHIVING] Images (total: {total} batch: {len(items_to_process)}/{batch})"
+        progress.desc = f"[ARCHIVING] Images (total: {total} batch: {batch})"
         with ThreadPoolExecutor(max_workers=batch) as executor:
             download_func = partial(download_image_with_progress_bar, progress=progress)
             executor.map(download_func, items_to_process)
