@@ -236,7 +236,7 @@ def image_queue_handler(img_queue: queue.Queue, batch=64, timeout=1800):
         timeout_time = batch_start_time + timeout
         url = None
 
-        progress = tqdm(total=batch, desc=f"[QUEUED] Images (total: {total})", position=BOTTOM_POSITION-2, leave=False)
+        progress = tqdm(total=batch, desc=f"📬 (total: {total})", position=BOTTOM_POSITION-2, leave=False)
 
         while len(items_to_process) < batch:
             try:
@@ -247,7 +247,7 @@ def image_queue_handler(img_queue: queue.Queue, batch=64, timeout=1800):
                 if url is not None:
                   items_to_process.append((url, path))
                   total += 1
-                  progress.desc = f"[QUEUED] Images (total: {total} batch: {len(items_to_process)}/{batch})"
+                  progress.desc = f"📬 (total: {total} batch: {len(items_to_process)}/{batch})"
                   batch_start_time = time.time()  # Update the batch start time
             except queue.Empty:
                 if time.time() > timeout_time:
@@ -264,7 +264,7 @@ def image_queue_handler(img_queue: queue.Queue, batch=64, timeout=1800):
         if not items_to_process:
             break
 
-        progress.desc = f"[ARCHIVING] Images (total: {total} batch: {batch})"
+        progress.desc = f"📫 (total: {total} batch: {batch})"
         with ThreadPoolExecutor(max_workers=batch) as executor:
             download_func = partial(download_image_with_progress_bar, progress=progress)
             executor.map(download_func, items_to_process)
