@@ -103,7 +103,7 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
 
 def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, skip_canvas: bool, no_fills: bool, figma_token: str, format: str, scale: int, depth: int, index: int, size: int, pbar: tqdm, concurrency: int):
     # for key, json_file in files:
-    for key, json_file in tqdm(files, desc=f"{concurrency - index}", position=BOTTOM_POSITION-(index+4), leave=True, total=size):
+    for key, json_file in tqdm(files, desc=f"⚡️", position=BOTTOM_POSITION-(index+4), leave=True, total=size):
         subdir: Path = root_dir / key
         subdir.mkdir(parents=True, exist_ok=True)
 
@@ -381,9 +381,9 @@ def fetch_node_images(file_key, ids, scale, format, token, position):
 
     # TODO: group the batches to one ThreadPoolExecutor
     # TODO: the below logic seems duplicated.
-
+    emojis = ['🛫', '🛬']
     image_urls = {}
-    with tqdm(range(num_batches), desc=f"⚡️ ({len(ids)}/{len(ids_chunks)}/{num_batches})", position=position, leave=False) as pbar:
+    with tqdm(range(num_batches), desc=f"{random.choice(emojis)} ({len(ids)}/{len(ids_chunks)}/{num_batches})", position=position, leave=False, mininterval=1) as pbar:
         for batch_idx in pbar:
             start_idx = batch_idx * max_concurrent_requests
             end_idx = start_idx + max_concurrent_requests
