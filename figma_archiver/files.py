@@ -74,7 +74,7 @@ def save_file_locally(args):
 @click.option("-t", "--figma-token", help="Figma API access token.", default=os.getenv("FIGMA_ACCESS_TOKEN"), type=str)
 @click.option("-o", "--output-dir", help="Output directory to save the JSON files.", default="downloads", type=click.Path(file_okay=False))
 @click.option("-c", "--concurrency", help="Number of concurrent processes.", default=cpu_count(), type=int)
-@click.option("--validate", help="Rather to validate the json response (downloading and already archived ones).", default=False, type=bool)
+@click.option('--validate', is_flag=True, help="Rather to validate the json response (downloading and already archived ones).", default=False, type=click.BOOL)
 def main(figma_file_id, figma_token, output_dir, concurrency, validate):
     if not figma_token:
         print(
