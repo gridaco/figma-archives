@@ -2,11 +2,13 @@
 
 Figma Files Scraper for Research &amp; Studies
 
+> As of Apr 2023, This Archive contains 550GB of Figma Files, and 2TB of Images corresponding to Fimga layers and used image fills.
+
 ## Demo
 
 ![figma-scraper demo](./docs/demo.gif)
 
-*Demo of step 2 ~ 4 running concurrently*
+_Demo of step 2 ~ 4 running concurrently_
 
 ## Usage
 
