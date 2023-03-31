@@ -333,7 +333,7 @@ def fetch_node_images(file_key, ids, scale, format, token, position):
         yield chunk
 
 
-    max_retry = 3
+    max_retry = 5
     delay_between_429 = 10
     ids_chunks = list(chunk(ids))
 
