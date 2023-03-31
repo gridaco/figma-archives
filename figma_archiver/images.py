@@ -21,8 +21,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import partial
 import queue
 from typing import List, Tuple
+import resource
 
 
+
+resource.setrlimit(
+    resource.RLIMIT_CORE,
+    (resource.RLIM_INFINITY, resource.RLIM_INFINITY))
 
 
 load_dotenv()
@@ -41,10 +46,17 @@ BOTTOM_POSITION = 24
 @click.option("-src", '--source-dir', default="./downloads/*.json", help="Path to the JSON file")
 @click.option("-c", "--concurrency", help="Number of concurrent processes.", default=cpu_count(), type=int)
 @click.option("--skip", help="Number of files to skip (for dubugging).", default=0, type=int)
-def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_dir, concurrency, skip):
+@click.option("--rand", is_flag=True, help="Rather if to randomize the input for even distribution", default=False, type=click.BOOL)
+def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_dir, concurrency, skip, rand):
     # progress bar position config
     global BOTTOM_POSITION
     BOTTOM_POSITION = concurrency * 2 + 5
+
+    # figma token
+    if figma_token.startswith("[") and figma_token.endswith("]"):
+      figma_tokens = json.loads(figma_token)
+    else:
+      figma_tokens = [figma_token]
 
     img_queue = queue.Queue()
     root_dir = Path(dir)
@@ -56,10 +68,11 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
     file_keys = [Path(file).stem for file in json_files]
 
     # randomize for even distribution
-    shuffled = [item for item in range(len(json_files))]
-    random.shuffle(shuffled)
-    json_files = [json_files[i] for i in shuffled]
-    file_keys = [file_keys[i] for i in shuffled]
+    if rand:
+      shuffled = [item for item in range(len(json_files))]
+      random.shuffle(shuffled)
+      json_files = [json_files[i] for i in shuffled]
+      file_keys = [file_keys[i] for i in shuffled]
 
     # download thread
     download_thread = threading.Thread(target=image_queue_handler, args=(img_queue,))
@@ -71,6 +84,8 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
     chunks = chunked_zips(file_keys, json_files, n=concurrency)
     threads: list[threading.Thread] = []
 
+    tqdm.write(f"🔥 {concurrency} threads / {len(figma_tokens)} identities")
+
     # run the main thread loop
     size_avg = len(json_files) // concurrency # a accurate enough estimate for the progress bar. this is required since we cannot consume the zip iterator. - which means cannot get the size of the files inside each thread. this can be improved, but we're keeping it this way.
     for _ in range(concurrency):
@@ -80,7 +95,7 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
         'img_queue': img_queue,
         'skip_canvas': skip_canvas,
         'no_fills': no_fills,
-        'figma_token': figma_token,
+        'figma_token': figma_tokens[(_ + 1) % len(figma_tokens)],
         'format': format,
         'scale': scale,
         'depth': depth,
@@ -91,6 +106,8 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
       })
       t.start()
       threads.append(t)
+      # give each thread a little time difference to prevent 429
+      time.sleep(10)
 
     for t in threads:
       t.join()
@@ -103,7 +120,7 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
 
 def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, skip_canvas: bool, no_fills: bool, figma_token: str, format: str, scale: int, depth: int, index: int, size: int, pbar: tqdm, concurrency: int):
     # for key, json_file in files:
-    for key, json_file in tqdm(files, desc=f"⚡️", position=BOTTOM_POSITION-(index+4), leave=True, total=size):
+    for key, json_file in tqdm(files, desc=f"⚡️ {figma_token[:8]}", position=BOTTOM_POSITION-(index+4), leave=True, total=size):
         subdir: Path = root_dir / key
         subdir.mkdir(parents=True, exist_ok=True)
 
@@ -291,8 +308,11 @@ def fetch_and_save_images(url_and_path_pairs, position=5, num_threads=128):
 def fetch_file_images(file_key, token):
     url = f"{API_BASE_URL}/files/{file_key}/images"
     headers = {"X-FIGMA-TOKEN": token}
-    response = requests.get(url, headers=headers)
-    data = response.json()
+    try:
+      response = requests.get(url, headers=headers)
+      data = response.json()
+    except requests.exceptions.ConnectionError as e:
+        return {}
 
     if "error" in data and data["error"]:
         raise ValueError("Error fetching image fills")
@@ -334,7 +354,7 @@ def fetch_node_images(file_key, ids, scale, format, token, position, conncurrenc
 
 
     max_retry = 5
-    delay_between_429 = (conncurrency * 2) * 5
+    delay_between_429 = 5
     ids_chunks = list(chunk(ids))
 
 
@@ -357,7 +377,7 @@ def fetch_node_images(file_key, ids, scale, format, token, position, conncurrenc
             # check if retry-after header is present
             retry_after = response.headers.get("retry-after")
             retry_after = int(
-                retry_after) if retry_after else delay_between_429
+                retry_after) if retry_after else (conncurrency * random.randint(1, 3)) * delay_between_429 * (retry + 1)
 
             tqdm.write(
                 f"☒ HTTP429 - Waiting {retry_after} seconds before retrying...  ({retry + 1}/{max_retry})")
