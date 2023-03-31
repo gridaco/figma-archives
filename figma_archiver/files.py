@@ -80,6 +80,10 @@ def main(figma_file_id, figma_token, output_dir, concurrency, validate):
         print(
             "Please set the FIGMA_ACCESS_TOKEN environment variable or provide it with the -t option.")
         exit(1)
+    
+    # figma token (we don't utilize multiple tokens here.)
+    if figma_token.startswith("[") and figma_token.endswith("]"):
+      figma_token = json.loads(figma_token)[0]
 
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -113,6 +117,12 @@ def main(figma_file_id, figma_token, output_dir, concurrency, validate):
         pool.terminate()
         pool.join()
         sys.exit(1)
+    
+    if validate:
+      for file in output_path.glob("*.json"):
+          if not is_valid_json_file(file):
+            print(f"Failed to validate json file properly {file}. Malformed json.")
+            file.unlink()
 
     for result in results:
         if isinstance(result, str) and result.startswith("Failed"):
