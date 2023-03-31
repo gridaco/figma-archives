@@ -149,7 +149,7 @@ def process_files(files, image_queue):
 
 def requests_retry_session(
     retries=3,
-    backoff_factor=0.3,
+    backoff_factor=1,
     status_forcelist=(500, 502, 504),
     session=None,
 ):
@@ -211,10 +211,10 @@ def image_queue_handler(img_queue: queue.Queue, batch=20, timeout=300):
             executor.map(download_func, items_to_process)
 
     progress.close()
-    
 
 
-def fetch_and_save_images(url_and_path_pairs, position=0, num_threads=20):
+
+def fetch_and_save_images(url_and_path_pairs, position=0, num_threads=128):
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
         futures = {executor.submit(download_image, url, path): (url, path) for url, path in url_and_path_pairs}
 
