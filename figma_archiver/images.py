@@ -175,6 +175,8 @@ def requests_retry_session(
     logger=logging.getLogger('backoff').addHandler(logging.StreamHandler())
 )
 def download_image(url, output_path, timeout=10):
+    if url is None:
+        return None, None
     try:
         response = requests_retry_session().get(url, stream=True, timeout=timeout)
         response.raise_for_status()
@@ -200,7 +202,7 @@ def image_queue_handler(img_queue: queue.Queue, batch=20, timeout=1800):
         timeout_time = batch_start_time + timeout
         url = None
 
-        progress = tqdm(total=img_queue.qsize(), desc=f"Archiving Images.. ({total})", position=9, leave=True)
+        progress = tqdm(total=img_queue.qsize(), desc=f"[QUEUED] Archiving Images.. (total: {total})", position=9, leave=False)
 
         while len(items_to_process) < batch:
             try:
@@ -209,9 +211,8 @@ def image_queue_handler(img_queue: queue.Queue, batch=20, timeout=1800):
                     break
 
                 items_to_process.append((url, path))
-                progress.update(1)
                 total += 1
-                progress.desc = f"Archiving Images.. ({total})"
+                progress.desc = f"[QUEUED] Archiving Images.. (total: {total} batch: {len(items_to_process)}/{batch})"
                 batch_start_time = time.time()  # Update the batch start time
             except queue.Empty:
                 if time.time() > timeout_time:
@@ -233,6 +234,7 @@ def image_queue_handler(img_queue: queue.Queue, batch=20, timeout=1800):
             executor.map(download_func, items_to_process)
 
         time.sleep(0.1)
+        progress.close()
 
     tqdm.write("✅ Image Archiving Complete")
 
