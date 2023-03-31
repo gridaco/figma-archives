@@ -45,8 +45,6 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
     _src_file_pattern = source_dir.split("/")[-1]            # e.g. *.json
     json_files = glob.glob(_src_file_pattern, root_dir=_src_dir)
     file_keys = [Path(file).stem for file in json_files]
-    img_queue.put((None, None))  # Add a sentinel value to indicate the end of the queue
-
 
     download_thread = threading.Thread(target=image_queue_handler, args=(img_queue,))
     download_thread.start()
@@ -99,7 +97,9 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
                     (url, os.path.join(images_dir, f"{hash_}.{format}"))
                     for hash_, url in image_fills.items()
                 ]
-                fetch_and_save_images(url_and_path_pairs, position=7)
+
+                for pair in url_and_path_pairs:
+                  img_queue.put(pair)
             else:
                 tqdm.write(f"{images_dir} - Image fills already fetched")
 
@@ -131,7 +131,8 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
                   )
                   for node_id, url in layer_images.items()
               ]
-              fetch_and_save_images(url_and_path_pairs, position=8)
+              for pair in url_and_path_pairs:
+                  img_queue.put(pair)
           else:
               tqdm.write(f"{images_dir} - Layer images already fetched")
 
@@ -140,6 +141,9 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
           tqdm.write(
                 f"Skipping directory {subdir}: Valid JSON file not found at '{json_file}'")
 
+    tqdm.write("All done!")
+    # Signal the handler to stop by adding a None item
+    img_queue.put(('EOD', 'EOD'))
     # finally wait for the download thread to finish
     download_thread.join()
 
@@ -182,26 +186,44 @@ def download_image(url, output_path, timeout=10):
         tqdm.write(f"Error downloading {url}: {e}")
         return None, None
 
-def image_queue_handler(img_queue: queue.Queue, batch=20, timeout=300):
-    def download_image_with_progress_bar(url_path, progress):
-        url, path = url_path
-        download_image(url, path)
-        progress.update(1)
-        return
-    
-    progress = tqdm(total=img_queue.qsize(), desc="Archiving Images", position=9)
 
+def download_image_with_progress_bar(url_path, progress):
+    url, path = url_path
+    download_image(url, path)
+    progress.update(1)
+
+def image_queue_handler(img_queue: queue.Queue, batch=20, timeout=1800):
+    total = 0
     while True:
         items_to_process = []
-        while True:
+        batch_start_time = time.time()
+        timeout_time = batch_start_time + timeout
+        url = None
+
+        progress = tqdm(total=img_queue.qsize(), desc=f"Archiving Images.. ({total})", position=9, leave=True)
+
+        while len(items_to_process) < batch:
             try:
-                url, path = img_queue.get(timeout=timeout)
-                if url is None:
+                url, path = img_queue.get(timeout=1)
+                if url == 'EOD':  # Check for sentinel value ('EOD', 'EOD')
                     break
+
                 items_to_process.append((url, path))
-                progress.total += 1
+                progress.update(1)
+                total += 1
+                progress.desc = f"Archiving Images.. ({total})"
+                batch_start_time = time.time()  # Update the batch start time
             except queue.Empty:
-                break
+                if time.time() > timeout_time:
+                    tqdm.write("⏰ Image Archiving Timed Out")
+                    break
+
+        if time.time() > timeout_time:
+            break
+
+        if url == 'EOD':  # Break the outer loop if sentinel value is encountered
+            tqdm.write("⏰ sentinel value encountered")
+            break
 
         if not items_to_process:
             break
@@ -210,11 +232,11 @@ def image_queue_handler(img_queue: queue.Queue, batch=20, timeout=300):
             download_func = partial(download_image_with_progress_bar, progress=progress)
             executor.map(download_func, items_to_process)
 
-    progress.close()
+        time.sleep(0.1)
 
+    tqdm.write("✅ Image Archiving Complete")
 
-
-def fetch_and_save_images(url_and_path_pairs, position=0, num_threads=128):
+def fetch_and_save_images(url_and_path_pairs, position=5, num_threads=128):
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
         futures = {executor.submit(download_image, url, path): (url, path) for url, path in url_and_path_pairs}
 
@@ -279,7 +301,10 @@ def fetch_node_images(file_key, ids, scale, format, token):
         try:
             response = requests.get(url, headers=headers, params=params)
         except requests.exceptions.ConnectionError as e:
-            log_error(f"Error fetching {len(chunk)} layer images [{','.join(chunk)}], e:{e}")
+            return {}
+        except requests.exceptions.JSONDecodeError as e:
+            return {}
+        except json.decoder.JSONDecodeError as e:
             return {}
 
         if response.status_code == 429:
@@ -307,8 +332,11 @@ def fetch_node_images(file_key, ids, scale, format, token):
         return data["images"]
 
     max_concurrent_requests = 10
-    delay_between_batches = 5
+    delay_between_batches = 1
     num_batches = -(-len(ids_chunks) // max_concurrent_requests)
+
+    # TODO: group the batches to one ThreadPoolExecutor
+    # TODO: the below logic seems duplicated.
 
     image_urls = {}
     with tqdm(range(num_batches), desc=f"Fetching ({len(ids)}/{len(ids_chunks)}/{num_batches})", position=2, leave=False) as pbar:
@@ -333,19 +361,21 @@ def fetch_node_images(file_key, ids, scale, format, token):
 # utils
 
 def log_error(msg, print=True):
-    if print:
-        tqdm.write(msg)
+    try:
+      if print:
+          tqdm.write(msg)
 
-    # check if err log file exists
-    err_log_file = Path("err.log")
-    if not err_log_file.exists():
-        with open(err_log_file, "w") as f:
-            f.write("")
-            f.close()
-    
-    with open(err_log_file, "a") as f:
-        f.write(msg + "\n")
-        f.close()
+      # check if err log file exists
+      err_log_file = Path("err.log")
+      if not err_log_file.exists():
+          with open(err_log_file, "w") as f:
+              f.write("")
+              f.close()
+      
+      with open(err_log_file, "a") as f:
+          f.write(msg + "\n")
+          f.close()
+    except Exception as e:...
 
 
 def read_file_data(file: Path):
