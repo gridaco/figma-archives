@@ -389,7 +389,7 @@ def read_file_data(file: Path):
             file_data = json.load(file)
             return file_data
         except json.decoder.JSONDecodeError as e:
-          tqdm.write(f"Error loading {file} Skipping... (Malformed JSON file)) - error: {e.msg} {e.args}")
+          log_error(f"Error loading {file} Skipping... (Malformed JSON file)) - error: {e.msg} {e.args}")
 
           # read the json file and print the start and end of it for debugging
           try:
