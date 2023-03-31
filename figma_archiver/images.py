@@ -1,6 +1,7 @@
 import glob
 import logging
 from multiprocessing import cpu_count
+import random
 import threading
 import click
 import time
@@ -19,13 +20,15 @@ from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import partial
 import queue
+from typing import List, Tuple
+
 
 
 
 load_dotenv()
 
 API_BASE_URL = "https://api.figma.com/v1"
-
+BOTTOM_POSITION = 24
 
 @click.command()
 @click.option("-dir", default="./downloads", type=click.Path(exists=True), help="Image format to bake the layers")
@@ -39,6 +42,10 @@ API_BASE_URL = "https://api.figma.com/v1"
 @click.option("-c", "--concurrency", help="Number of concurrent processes.", default=cpu_count(), type=int)
 @click.option("--skip", help="Number of files to skip (for dubugging).", default=0, type=int)
 def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_dir, concurrency, skip):
+    # progress bar position config
+    global BOTTOM_POSITION
+    BOTTOM_POSITION = concurrency * 2 + 5
+
     img_queue = queue.Queue()
     root_dir = Path(dir)
 
@@ -48,27 +55,59 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
     json_files = json_files[skip:]
     file_keys = [Path(file).stem for file in json_files]
 
+    # randomize for even distribution
+    shuffled = [item for item in range(len(json_files))]
+    random.shuffle(shuffled)
+    json_files = [json_files[i] for i in shuffled]
+    file_keys = [file_keys[i] for i in shuffled]
+
+    # download thread
     download_thread = threading.Thread(target=image_queue_handler, args=(img_queue,))
     download_thread.start()
 
+    # main progress bar
+    pbar = tqdm(total=len(json_files), position=BOTTOM_POSITION, leave=True)
+
+    chunks = chunked_zips(file_keys, json_files, n=concurrency)
+    threads: list[threading.Thread] = []
+
     # run the main thread loop
+    size_avg = len(json_files) // concurrency # a accurate enough estimate for the progress bar. this is required since we cannot consume the zip iterator. - which means cannot get the size of the files inside each thread. this can be improved, but we're keeping it this way.
+    for _ in range(concurrency):
+      t = threading.Thread(target=process_files, args=(chunks[_],), kwargs={
+        'root_dir': root_dir,
+        'src_dir': _src_dir,
+        'img_queue': img_queue,
+        'skip_canvas': skip_canvas,
+        'no_fills': no_fills,
+        'figma_token': figma_token,
+        'format': format,
+        'scale': scale,
+        'depth': depth,
+        'size': size_avg,
+        'index': _,
+        'pbar': pbar,
+        'concurrency': concurrency
+      })
+      t.start()
+      threads.append(t)
 
-    # TODO: utilize the concurrency parameter
-    # chunks = chunk_list(zip(file_keys, json_files), concurrency)
-    # threads = []
-    # for _ in range(concurrency):
-    #   t = threading.Thread(target=process_files, args=(files, img_queue,))
-    #   t.start()
-    #   threads.append(t)
-    # for t in threads:
-    #   t.join()
+    for t in threads:
+      t.join()
 
-    for key, json_file in tqdm(zip(file_keys, json_files), desc="Directories", position=10, leave=True, total=len(file_keys)):
+    tqdm.write("All done!")
+    # Signal the handler to stop by adding a None item
+    img_queue.put(('EOD', 'EOD'))
+    # finally wait for the download thread to finish
+    download_thread.join()
 
-        subdir = root_dir / key
+def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, skip_canvas: bool, no_fills: bool, figma_token: str, format: str, scale: int, depth: int, index: int, size: int, pbar: tqdm, concurrency: int):
+    # for key, json_file in files:
+    for key, json_file in tqdm(files, desc=f"Worker {index + 1}", position=BOTTOM_POSITION-(index+4), leave=True, total=size):
+        subdir: Path = root_dir / key
         subdir.mkdir(parents=True, exist_ok=True)
 
-        json_file = _src_dir / Path(json_file)
+        json_file = src_dir / Path(json_file)
         file_data = read_file_data(json_file)
 
         if file_data:
@@ -123,7 +162,7 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
           if node_ids_to_fetch:
               # tqdm.write(f"Fetching {len(node_ids_to_fetch)} of {len(node_ids)} layer images...")
               layer_images = fetch_node_images(
-                  key, node_ids_to_fetch, scale, format, token=figma_token)
+                  key, node_ids_to_fetch, scale, format, token=figma_token, position=BOTTOM_POSITION-(concurrency+index+5))
               url_and_path_pairs = [
                   (
                       url,
@@ -143,15 +182,7 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
           tqdm.write(f"☑ {subdir}")
         else:
           tqdm.write(f"☒ {subdir}")
-
-    tqdm.write("All done!")
-    # Signal the handler to stop by adding a None item
-    img_queue.put(('EOD', 'EOD'))
-    # finally wait for the download thread to finish
-    download_thread.join()
-
-def process_files(files, image_queue):
-    ...
+        pbar.update(1)
 
 
 def requests_retry_session(
@@ -197,7 +228,7 @@ def download_image_with_progress_bar(url_path, progress):
     download_image(url, path)
     progress.update(1)
 
-def image_queue_handler(img_queue: queue.Queue, batch=16, timeout=1800):
+def image_queue_handler(img_queue: queue.Queue, batch=64, timeout=1800):
     total = 0
     while True:
         items_to_process = []
@@ -205,7 +236,7 @@ def image_queue_handler(img_queue: queue.Queue, batch=16, timeout=1800):
         timeout_time = batch_start_time + timeout
         url = None
 
-        progress = tqdm(total=batch, desc=f"[QUEUED] Images (total: {total})", position=9, leave=False)
+        progress = tqdm(total=batch, desc=f"[QUEUED] Images (total: {total})", position=BOTTOM_POSITION-2, leave=False)
 
         while len(items_to_process) < batch:
             try:
@@ -263,11 +294,13 @@ def fetch_file_images(file_key, token):
 
     if "error" in data and data["error"]:
         raise ValueError("Error fetching image fills")
+    try:
+      return data["meta"]["images"]
+    except KeyError:
+      return {}
 
-    return data["meta"]["images"]
 
-
-def fetch_node_images(file_key, ids, scale, format, token):
+def fetch_node_images(file_key, ids, scale, format, token, position):
     url = f"{API_BASE_URL}/images/{file_key}"
     headers = {"X-FIGMA-TOKEN": token}
     params = {
@@ -326,7 +359,7 @@ def fetch_node_images(file_key, ids, scale, format, token):
                 retry_after) if retry_after else delay_between_429
 
             tqdm.write(
-                f"HTTP429 - Waiting {retry_after} seconds before retrying...  ({retry + 1}/{max_retry})")
+                f"☒ HTTP429 - Waiting {retry_after} seconds before retrying...  ({retry + 1}/{max_retry})")
             time.sleep(retry_after)
             return fetch_images_chunk(chunk, retry=retry + 1)
 
@@ -350,7 +383,7 @@ def fetch_node_images(file_key, ids, scale, format, token):
     # TODO: the below logic seems duplicated.
 
     image_urls = {}
-    with tqdm(range(num_batches), desc=f"Fetching ({len(ids)}/{len(ids_chunks)}/{num_batches})", position=2, leave=False) as pbar:
+    with tqdm(range(num_batches), desc=f"Fetching ({len(ids)}/{len(ids_chunks)}/{num_batches})", position=position, leave=False) as pbar:
         for batch_idx in pbar:
             start_idx = batch_idx * max_concurrent_requests
             end_idx = start_idx + max_concurrent_requests
@@ -461,8 +494,27 @@ def get_node_ids(data, depth=None, skip_canvas=True):
 def get_existing_images(images_dir):
     return set(os.listdir(images_dir))
 
-def chunk_list(input_list, n):
-    return [input_list[i:i + n] for i in range(0, len(input_list), n)]
+
+
+
+
+def chunked_zips(a: list, b: list, n: int) -> List[zip]:
+    zipsize = len(a)
+    per_zip = zipsize // n
+    remainder = zipsize - per_zip * n
+    zips = []
+    for i in range(n - 1):
+        start = i * per_zip
+        end = start + per_zip
+        _a = a[start:end]
+        _b = b[start:end]
+        zips.append(zip(_a, _b))
+    start = (n - 1) * per_zip
+    end = start + per_zip + remainder
+    _a = a[start:end]
+    _b = b[start:end]
+    zips.append(zip(_a, _b))
+    return zips
 
 
 
