@@ -330,7 +330,11 @@ def fetch_node_images(file_key, ids, scale, format, token):
             time.sleep(retry_after)
             return fetch_images_chunk(chunk, retry=retry + 1)
 
-        data = response.json()
+        try:
+          data = response.json()
+        except requests.exceptions.JSONDecodeError as e:
+          return {}
+        
         if "err" in data and data["err"]:
             # ignore and report error
             msg = f"Error fetching {len(chunk)} layer images [{','.join(chunk)}], e:{data['err']}"
