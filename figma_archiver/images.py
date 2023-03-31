@@ -286,7 +286,6 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
                     _last_few = txt[-100:]
                     tqdm.write(f"First few characters: \n{_first_few}")
                     tqdm.write(f"Last few characters: \n{_last_few}")
-                    json.loads(txt)
 
             if file_data:
               if depth is not None:
