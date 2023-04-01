@@ -7,3 +7,4 @@ requests
 backoff
 urllib3
 jsonlines
+colorama

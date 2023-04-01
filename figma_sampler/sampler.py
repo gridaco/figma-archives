@@ -5,6 +5,7 @@ from pathlib import Path
 import click
 from tqdm import tqdm
 import jsonlines
+from colorama import Fore, Back, Style
 
 
 @click.command()
@@ -63,7 +64,7 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
     targets = available[:sample_size]
 
     # Process samples with tqdm progress bar
-    for id, link, title in tqdm(targets, desc='🗳️', leave=True):
+    for id, link, title in tqdm(targets, desc='🗳️', leave=True, colour='white'):
         try:
             file_url = map_data[link]
 
@@ -105,14 +106,14 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
                 json.dump({"latest": meta_data[id]["version"], "versions": {
                           meta_data[id]["version"]: file_key}}, f)
 
-            tqdm.write(f"☑ {id} → {output_dir} ({file_key} / {title})")
+            tqdm.write(Fore.WHITE + f"☑ {id} → {output_dir} ({file_key} / {title})")
         except OkException as e:
-            tqdm.write(f'☒ {e.id} → {output_dir} WARNING ({e.file}) - {e.message}')
+            tqdm.write(Fore.YELLOW + f'☒ {e.id} → {output_dir} WARNING ({e.file}) - {e.message}')
         except SamplerException as e:
-            tqdm.write(f"☒ {e.id}/{file_key} - {e.message}")
+            tqdm.write(Fore.RED + f"☒ {e.id}/{file_key} - {e.message}")
             output_dir.exists() and shutil.rmtree(output_dir)
         except Exception as e:
-            tqdm.write(f"☒ {id}/{file_key} - ERROR sampleing <{title}>")
+            tqdm.write(Fore.RED + f"☒ {id}/{file_key} - ERROR sampleing <{title}>")
             output_dir.exists() and shutil.rmtree(output_dir)
             raise e
 
