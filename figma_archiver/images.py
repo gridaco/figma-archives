@@ -245,7 +245,7 @@ def download_image_with_progress_bar(url_path, progress):
     download_image(url, path)
     progress.update(1)
 
-def image_queue_handler(img_queue: queue.Queue, batch=64, timeout=1800):
+def image_queue_handler(img_queue: queue.Queue, batch=64, timeout=3600):
     emojis = ['📭', '📬', '📫']
     
     total = 0
@@ -414,9 +414,10 @@ def fetch_node_images(file_key, ids, scale, format, token, position, conncurrenc
               image_urls.update(fetch_images_chunk(chunk=_chunk))
 
             if batch_idx < num_batches - 1:
+                wait = delay_between_batches * batch_idx
                 pbar.set_description(
-                    f"{random.choice(emojis)} {batch_idx + 1 + 1}/{num_batches}: Waiting {delay_between_batches} seconds before next batch...")
-                time.sleep(delay_between_batches)
+                    f"{random.choice(emojis)} {batch_idx + 1 + 1}/{num_batches}: Waiting {wait} seconds before next batch...")
+                time.sleep(wait)
 
     return image_urls
 
