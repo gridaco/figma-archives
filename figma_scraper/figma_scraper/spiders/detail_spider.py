@@ -12,7 +12,12 @@ class FigmaSpider(scrapy.Spider):
 
   def __init__(self, index, **kwargs):
     # read the index file, seed the start_urls
-    ...
+    with open(index, "r", encoding="utf-8") as f:
+      index_data = json.load(f)
+      self.start_urls = [x['link'] for x in index_data]
+      f.close()
+
+    self.progress_bar.total = len(self.start_urls)
 
 
   def parse(self, response):
@@ -79,5 +84,7 @@ class FigmaSpider(scrapy.Spider):
         'related_content': related_content, 
     }
 
+    self.progress_bar.update(1)
 
     yield data
+ 
