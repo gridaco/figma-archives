@@ -106,8 +106,8 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
       })
       t.start()
       threads.append(t)
-      # give each thread a little time difference to prevent 429
-      time.sleep(10)
+      # # give each thread a little time difference to prevent 429
+      # time.sleep(10)
 
     for t in threads:
       t.join()
@@ -245,7 +245,7 @@ def download_image_with_progress_bar(url_path, progress):
     download_image(url, path)
     progress.update(1)
 
-def image_queue_handler(img_queue: queue.Queue, batch=64, timeout=1800):
+def image_queue_handler(img_queue: queue.Queue, batch=64, timeout=3600):
     emojis = ['📭', '📬', '📫']
     
     total = 0
@@ -372,15 +372,18 @@ def fetch_node_images(file_key, ids, scale, format, token, position, conncurrenc
         if response.status_code == 429:
             if retry >= max_retry:
                 log_error(f"Error fetching [{(','.join(chunk))}] layer images. Rate limit exceeded.")
+                tqdm.write(f"☒ HTTP429 - Rate limit exceeded. ({max_retry} tries)")
                 return {}
 
             # check if retry-after header is present
             retry_after = response.headers.get("retry-after")
             retry_after = int(
-                retry_after) if retry_after else (conncurrency * random.randint(1, 3)) * delay_between_429 * (retry + 1)
+                retry_after) if retry_after else delay_between_429 * (retry + 1) * conncurrency
 
-            tqdm.write(
-                f"☒ HTTP429 - Waiting {retry_after} seconds before retrying...  ({retry + 1}/{max_retry})")
+            if max_retry - retry < 2:
+              # only show the last retry message
+              tqdm.write(
+                  f"☒ HTTP429 - Waiting {retry_after} seconds before retrying...  ({retry + 1}/{max_retry})")
             time.sleep(retry_after)
             return fetch_images_chunk(chunk, retry=retry + 1)
 
@@ -399,6 +402,7 @@ def fetch_node_images(file_key, ids, scale, format, token, position, conncurrenc
     max_concurrent_requests = conncurrency
     delay_between_batches = 1
     num_batches = -(-len(ids_chunks) // max_concurrent_requests)
+    batch_chunks = chunked_list(ids_chunks, num_batches)
 
     # TODO: group the batches to one ThreadPoolExecutor
     # TODO: the below logic seems duplicated.
@@ -406,19 +410,14 @@ def fetch_node_images(file_key, ids, scale, format, token, position, conncurrenc
     image_urls = {}
     with tqdm(range(num_batches), desc=f"{random.choice(emojis)} ({len(ids)}/{len(ids_chunks)}/{num_batches})", position=position, leave=False, mininterval=1) as pbar:
         for batch_idx in pbar:
-            start_idx = batch_idx * max_concurrent_requests
-            end_idx = start_idx + max_concurrent_requests
-            batch_chunks = ids_chunks[start_idx:end_idx]
-
-            with ThreadPoolExecutor(max_workers=max_concurrent_requests) as executor:
-                results = [result for result in executor.map(fetch_images_chunk, batch_chunks)]
-                for chunk_result in results:
-                    image_urls.update(chunk_result)
+            for _chunk in batch_chunks[batch_idx]:
+              image_urls.update(fetch_images_chunk(chunk=_chunk))
 
             if batch_idx < num_batches - 1:
+                wait = delay_between_batches * batch_idx
                 pbar.set_description(
-                    f"Entry {batch_idx + 1 + 1}/{num_batches}: Waiting {delay_between_batches} seconds before next batch...")
-                time.sleep(delay_between_batches)
+                    f"{random.choice(emojis)} {batch_idx + 1 + 1}/{num_batches}: Waiting {wait} seconds before next batch...")
+                time.sleep(wait)
 
     return image_urls
 
@@ -536,6 +535,22 @@ def chunked_zips(a: list, b: list, n: int) -> List[zip]:
     _b = b[start:end]
     zips.append(zip(_a, _b))
     return zips
+
+def chunked_list(a: list, n: int) -> List[zip]:
+    listsize = len(a)
+    perlist = listsize // n
+    remainder = listsize - perlist * n
+    chunks = []
+    for i in range(n - 1):
+        start = i * perlist
+        end = start + perlist
+        _a = a[start:end]
+        chunks.append(_a)
+    start = (n - 1) * perlist
+    end = start + perlist + remainder
+    _a = a[start:end]
+    chunks.append(_a)
+    return chunks
 
 
 
