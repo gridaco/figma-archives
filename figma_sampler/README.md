@@ -52,16 +52,14 @@ Once complete, the output directory will be populated with the following files.
 
 ```bash
 python3 sampler.py
-  \ --index='../data/sample-index-5k.json'
-  \ --map='../data/sample-map-5k.json'
-  \ --meta='../data/sample-meta-5k.json'
-  \ --output='../data/sample-5k'
-  \ --dir-files-archive='./Volumes/WD2TB/Data/figma-scraper-archives'
-  \ --dur-images-archive'./Volumes/WD2TB/Data/figma-scraper-image-archives'
+  \ --index='../data/samples-5k/index.json'
+  \ --map='../data/samples-5k/map.json'
+  \ --meta='../data/samples-5k/meta.json'
+  \ --output='../data/samples-5k/samples'
+  \ --dir-files-archive='/Volumes/WDB2TB/Data/figma-scraper-archives'
+  \ --dur-images-archive'/Volumes/WDB2TB/Data/figma-scraper-image-archives'
   \ --sample=5000
 ```
-
-````
 
 ### Stats
 
@@ -86,4 +84,4 @@ python3 stats.py
   \ --index='path-to-index.json'
   \ --dir-archive-files='path-to-files-archive'
   \ --dur-archives-images'path-to-images-archives'
-````
+```
