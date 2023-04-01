@@ -13,10 +13,11 @@ import jsonlines
 @click.option('--meta', required=True, type=click.Path(exists=True), help='Path to meta file (JSON)')
 @click.option('--output', required=True, type=click.Path(), help='Path to output directory')
 @click.option('--dir-files-archive', required=True, type=str, help='Path to files archive directory')
-@click.option('--dur-images-archive', required=True, type=str, help='Path to images archive directory')
+@click.option('--dir-images-archive', required=True, type=str, help='Path to images archive directory')
 @click.option('--sample', default=None, type=int, help='Number of samples to process')
 @click.option('--sample-all', is_flag=False, help='Process all available data')
-def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample, sample_all):
+@click.option('--ensure-images', is_flag=False, help='Ensure images exists for files')
+def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample, sample_all, ensure_images):
     # Read index file
     with jsonlines.open(index, mode='r') as reader:
         # get id, link, title
@@ -28,7 +29,10 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
 
     # Read meta file
     with open(meta, 'r') as f:
+        # it is a array of objects with id, name, description, version, ...
         meta_data = json.load(f)
+        # now, convert it to key-value pair with id as key
+        meta_data = {obj["id"]: obj for obj in meta_data}
 
     dir_files_archive = Path(dir_files_archive)
     dir_images_archive = Path(dir_images_archive)
@@ -37,13 +41,15 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
 
+    tqdm.write(f"📂 {output}")
+
     # locate the already-sampled files with finding map.json files
     # get the ids of the already-sampled files
     completes = [x.parent.name for x in output.glob('**/map.json')]
 
     # pre-validate the targtes (check if drafted file exists for community lunk)
-    available = [(id, link) for id, link in index_data
-                 if map_data[link] is not None]
+    available = [(id, link, _) for id, link, _ in index_data
+                 if link in map_data and map_data[link] is not None]
 
     # remove the already-sampled files from the available list
     available = [x for x in available if x[0] not in completes]
@@ -64,20 +70,28 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
             file_key = extract_file_key(file_url)
             output_dir: Path = output / id
 
-            tqdm.write(f"☐ {file_key}")
+            tqdm.write(f"☐ {id}/{file_key}")
 
-            # If the output directory already exists, remove it and create a new one
+            # If the output directory already exists, remove it
             if output_dir.exists():
                 shutil.rmtree(output_dir)
-                output_dir.mkdir(parents=False, exist_ok=False)
+            # and create a new one
+            output_dir.mkdir(parents=False, exist_ok=False)
 
             # Copy file.json
-            shutil.copy(dir_files_archive /
+            try:
+                shutil.copy(dir_files_archive /
                         f"{file_key}.json", output_dir / "file.json")
+            except FileNotFoundError as e:
+                raise OkException(f"☒ {id}/{file_key} - File not found for sample <{title}>")
 
             # Copy images
-            shutil.copytree(dir_images_archive / file_key,
-                            output_dir / "images")
+            images_archive_dir = dir_images_archive / file_key
+            if images_archive_dir.exists():
+              shutil.copytree(images_archive_dir, output_dir / "images")
+            else:
+              if ensure_images:
+                raise OkException(f"☒ {id}/{file_key} - Images not found for sample <{title}>")
 
             # Write meta.json
             with open(output_dir / "meta.json", "w") as f:
@@ -88,10 +102,15 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
                 json.dump({"latest": meta_data[id]["version"], "versions": {
                           meta_data[id]["version"]: file_key}}, f)
 
-            tqdm.write(f"☑️ {file_key}")
+            tqdm.write(f"☑️ {id}/{file_key}")
+        except OkException as e:
+            tqdm.write(e.args[0])
         except Exception as e:
-            tqdm.write(f"☒ {file_key} - Error sampleing <{title}>")
+            tqdm.write(f"☒ {id}/{file_key} - Error sampleing <{title}>")
+            raise e
 
+class OkException(Exception):
+    pass
 
 def extract_file_key(url):
     """
