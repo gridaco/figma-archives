@@ -6,3 +6,4 @@ tqdm
 requests
 backoff
 urllib3
+jsonlines
