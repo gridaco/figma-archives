@@ -70,8 +70,6 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
             file_key = extract_file_key(file_url)
             output_dir: Path = output / id
 
-            tqdm.write(f"☐ {id}/{file_key}")
-
             # If the output directory already exists, remove it
             if output_dir.exists():
                 shutil.rmtree(output_dir)
@@ -83,7 +81,8 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
                 shutil.copy(dir_files_archive /
                         f"{file_key}.json", output_dir / "file.json")
             except FileNotFoundError as e:
-                raise OkException(f"☒ {id}/{file_key} - File not found for sample <{title}>")
+                shutil.rmtree(output_dir)
+                raise SamplerException(id, file_key, f"File not found for sample <{title}>")
 
             # Copy images
             images_archive_dir = dir_images_archive / file_key
@@ -91,14 +90,14 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
               shutil.copytree(images_archive_dir, output_dir / "images")
             else:
               if ensure_images:
-                raise OkException(f"☒ {id}/{file_key} - Images not found for sample <{title}>")
+                raise OkException(id, file_key, f"Images not found for sample <{title}>")
 
             # Write meta.json
             with open(output_dir / "meta.json", "w") as f:
                 try:
                   meta = meta_data[id]
                 except KeyError:
-                  raise OkException(f"☒ {id}/{file_key} - Meta not found for sample <{title}>")
+                  raise OkException(id, file_key, f"Meta not found for sample <{title}>")
                 json.dump(meta, f)
 
             # Write map.json
@@ -106,16 +105,25 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
                 json.dump({"latest": meta_data[id]["version"], "versions": {
                           meta_data[id]["version"]: file_key}}, f)
 
-            tqdm.write(f"☑ {id}/{file_key}")
+            tqdm.write(f"☑ {id} → {output_dir} ({file_key} / {title})")
         except OkException as e:
-            tqdm.write(e.args[0])
+            tqdm.write(f'☒ {e.id} → {output_dir} WARNING ({e.file}) - {e.message}')
+        except SamplerException as e:
+            tqdm.write(f"☒ {e.id}/{file_key} - {e.message}")
+            output_dir.exists() and shutil.rmtree(output_dir)
         except Exception as e:
-            tqdm.write(f"☒ {id}/{file_key} - Error sampleing <{title}>")
-            shutil.rmtree(output_dir)
+            tqdm.write(f"☒ {id}/{file_key} - ERROR sampleing <{title}>")
+            output_dir.exists() and shutil.rmtree(output_dir)
             raise e
 
-class OkException(Exception):
-    pass
+class SamplerException(Exception):
+    def __init__(self, id, file, message):
+        self.message = message
+        self.id = id
+        self.file = file
+
+class OkException(SamplerException):
+    ...
 
 def extract_file_key(url):
     """
