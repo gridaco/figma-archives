@@ -13,7 +13,8 @@ class FigmaMetaSpider(scrapy.Spider):
     start_urls = []
     progress_bar: tqdm
 
-    def __init__(self, index, max, **kwargs):
+    def __init__(self, index, **kwargs):
+        max = kwargs.pop('max', None)
 
         # read the index file, seed the start_urls
         with jsonlines.open(index) as reader:
