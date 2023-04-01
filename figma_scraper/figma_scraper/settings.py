@@ -106,6 +106,10 @@ SELENIUM_DRIVER_ARGUMENTS = ['--headless']
 # scraperapi settings
 SCRAPERAPI_KEY = os.getenv("SCRAPERAPI_KEY")
 
+SCRAPERAPI_OPTIONS = {
+    'render': 'false',
+    'country_code': 'us'
+}
 
 DOWNLOADER_MIDDLEWARES = {
     'figma_scraper.middlewares.scraperapi.ScrapyScraperAPIMiddleware': 350,
