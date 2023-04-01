@@ -14,7 +14,7 @@ _Demo of step 2 ~ 4 running concurrently_
 
 This scraper is a combination of
 
-1. Selenium scraper to crawl the Figma community files (Takes about 5 hours) - **You can skip this step and use our [latest data](./figma_scraper/figma_scraper/data/)**
+1. Selenium scraper to crawl the Figma community files (Takes about 5 hours) - **You can skip this step and use our [latest data](./figma_scraper/data/)**
 2. Selenium automator to copy (duplicate) the file to your account (Takes about 3 days)
 3. Figma File Archiver to download the File content as JSON (Takes about 5 hours)
 4. And optionally, Figma Image Archiver to download the in-design images and layer baked as PNGs to your local machine (Takes about 6 days for top-frame layers, and about 1 month for all layers)
