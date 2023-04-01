@@ -1,3 +1,8 @@
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 # Scrapy settings for figma_scraper project
 #
 # For simplicity, this file contains only settings considered important or
@@ -14,7 +19,8 @@ NEWSPIDER_MODULE = "figma_scraper.spiders"
 
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
-#USER_AGENT = "figma_scraper (+http://www.yourdomain.com)"
+# USER_AGENT = "figma_scraper (+http://www.yourdomain.com)"
+USER_AGENT = 'Mozilla/5.0 (iPad; CPU OS 12_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148'
 
 # Obey robots.txt rules
 ROBOTSTXT_OBEY = True
@@ -37,10 +43,10 @@ ROBOTSTXT_OBEY = True
 #TELNETCONSOLE_ENABLED = False
 
 # Override the default request headers:
-# DEFAULT_REQUEST_HEADERS = {
-#    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-#    "Accept-Language": "en",
-# }
+DEFAULT_REQUEST_HEADERS = {
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en",
+}
 
 # Enable or disable spider middlewares
 # See https://docs.scrapy.org/en/latest/topics/spider-middleware.html
@@ -70,12 +76,12 @@ ROBOTSTXT_OBEY = True
 # See https://docs.scrapy.org/en/latest/topics/autothrottle.html
 AUTOTHROTTLE_ENABLED = True
 # The initial download delay
-AUTOTHROTTLE_START_DELAY = 5
+# AUTOTHROTTLE_START_DELAY = 5
 # The maximum download delay to be set in case of high latencies
-AUTOTHROTTLE_MAX_DELAY = 60
+# AUTOTHROTTLE_MAX_DELAY = 60
 # The average number of requests Scrapy should be sending in parallel to
 # each remote server
-AUTOTHROTTLE_TARGET_CONCURRENCY = 2.0
+AUTOTHROTTLE_TARGET_CONCURRENCY = 5.0
 # Enable showing throttling stats for every response received:
 #AUTOTHROTTLE_DEBUG = False
 
@@ -95,3 +101,13 @@ FEED_EXPORT_ENCODING = "utf-8"
 
 # Use headless
 SELENIUM_DRIVER_ARGUMENTS = ['--headless']
+
+
+# scraperapi settings
+SCRAPERAPI_KEY = os.getenv("SCRAPERAPI_KEY")
+
+
+DOWNLOADER_MIDDLEWARES = {
+    'figma_scraper.middlewares.scraperapi.ScrapyScraperAPIMiddleware': 350,
+    'scrapy.downloadermiddlewares.httpproxy.HttpProxyMiddleware': 400,
+}

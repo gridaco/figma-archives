@@ -39,7 +39,6 @@ class FigmaMetaSpider(scrapy.Spider):
             total=len(self.start_urls), position=0)
 
     def parse(self, response: scrapy.http.Response):
-        tqdm.write(f"Processing {response.url}")
         di = response.xpath('//script/@data-initial')
         text = di.get()
         data = json.loads(text)
@@ -105,5 +104,6 @@ class FigmaMetaSpider(scrapy.Spider):
         }
 
         self.progress_bar.update(1)
+        tqdm.write(f"☑ {response.url}")
 
         yield data
