@@ -14,7 +14,7 @@ _Demo of step 2 ~ 4 running concurrently_
 
 This scraper is a combination of
 
-1. Selenium scraper to crawl the Figma community files (Takes about 5 hours) - **You can skip this step and use our [latest data](./figma_scraper/data/)**
+1. Selenium scraper to crawl the Figma community files (Takes about 5 hours) - **You can skip this step and use our [latest data](./data/)**
 2. Selenium automator to copy (duplicate) the file to your account (Takes about 3 days)
 3. Figma File Archiver to download the File content as JSON (Takes about 5 hours)
 4. And optionally, Figma Image Archiver to download the in-design images and layer baked as PNGs to your local machine (Takes about 6 days for top-frame layers, and about 1 month for all layers)
@@ -31,7 +31,7 @@ scrapy crawl figma_spider --nolog -a target=popular
 # step 2. You'll need a new figma account since it copies about 30,00+ files to your drafts
 # setup .env following the README at figma_copy
 cd figma_copy
-python3 main.py --file='../figma_scraper/figma_scraper/data/output.popular.json' --batch-size=10000
+python3 main.py --file='../data/sample-index-5k.json' --batch-size=10000
 # this will output a community : your-file mapping under prgress/your-email@example.com.copies.json
 
 # step 3. you can run this script with figma_copy in parallel

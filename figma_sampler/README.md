@@ -52,13 +52,13 @@ Once complete, the output directory will be populated with the following files.
 
 ```bash
 python3 sampler.py
-  \ --index='./data/figma-community-popular-20230329.json'
-  \ --map='../figma_copy/progress/figma@grida.co.copies.json'
-  \ --meta='./data/figma-community-popular-20230329.meta.json'
-  \ --output='./data/samples-1000'
+  \ --index='../data/sample-index-5k.json'
+  \ --map='../data/sample-map-5k.json'
+  \ --meta='../data/sample-meta-5k.json'
+  \ --output='../data/sample-5k'
   \ --dir-files-archive='./Volumes/WD2TB/Data/figma-scraper-archives'
   \ --dur-images-archive'./Volumes/WD2TB/Data/figma-scraper-image-archives'
-  \ --sample=1000
+  \ --sample=5000
 ```
 
 ````
