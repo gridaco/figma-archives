@@ -111,6 +111,7 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
             tqdm.write(e.args[0])
         except Exception as e:
             tqdm.write(f"☒ {id}/{file_key} - Error sampleing <{title}>")
+            shutil.rmtree(output_dir)
             raise e
 
 class OkException(Exception):
