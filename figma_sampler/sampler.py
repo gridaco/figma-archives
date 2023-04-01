@@ -63,7 +63,7 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
     targets = available[:sample_size]
 
     # Process samples with tqdm progress bar
-    for id, link, title in tqdm(targets, desc='🗳️'):
+    for id, link, title in tqdm(targets, desc='🗳️', leave=True):
         try:
             file_url = map_data[link]
 
@@ -95,14 +95,18 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
 
             # Write meta.json
             with open(output_dir / "meta.json", "w") as f:
-                json.dump(meta_data[id], f)
+                try:
+                  meta = meta_data[id]
+                except KeyError:
+                  raise OkException(f"☒ {id}/{file_key} - Meta not found for sample <{title}>")
+                json.dump(meta, f)
 
             # Write map.json
             with open(output_dir / "map.json", "w") as f:
                 json.dump({"latest": meta_data[id]["version"], "versions": {
                           meta_data[id]["version"]: file_key}}, f)
 
-            tqdm.write(f"☑️ {id}/{file_key}")
+            tqdm.write(f"☑ {id}/{file_key}")
         except OkException as e:
             tqdm.write(e.args[0])
         except Exception as e:
