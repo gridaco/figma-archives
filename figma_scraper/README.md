@@ -16,4 +16,4 @@ scrapy crawl meta_spider --nolog
 ```
 
 <!-- For us, the maintainers -->
-<!-- scrapy crawl meta_spider --nolog -a index='../data/figma-community-popular-20230329.json' -o ../data/figma-community-popular-20230329.meta.json -->
+<!-- scrapy crawl meta_spider --nolog -a index='../data/latest/index.json' -o ../data/latest/meta.json -->

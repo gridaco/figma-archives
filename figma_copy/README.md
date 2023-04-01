@@ -18,5 +18,5 @@ FIGMA_PASSWORD=<your-password>
 Then run
 
 ```bash
-python3 main.py --file='../figma_scraper/figma_scraper/data/figma-community-popular-20230329.json' --batch-size=500
+python3 main.py --file='../data/latest/index.json' --batch-size=500
 ```
