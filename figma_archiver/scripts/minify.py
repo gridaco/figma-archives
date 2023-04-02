@@ -78,7 +78,7 @@ def minify_json_directory(input_dir, index_dir, pattern, output, output_pattern,
     
     minified_files = {f.stem for f in minified_files}
 
-    if index_dir:        
+    if index_dir:
         json_files = sort_with_index(json_files=json_files, index_dir=index_dir)
 
     if shuffle:
@@ -91,6 +91,7 @@ def minify_json_directory(input_dir, index_dir, pattern, output, output_pattern,
     total_saved_space = 0
     with tqdm(json_files, desc='📦') as progress:
       for file_path in progress:
+          start_size = file_path.stat().st_size
 
           already_minified = False
           file_key = file_path.stem
@@ -111,7 +112,7 @@ def minify_json_directory(input_dir, index_dir, pattern, output, output_pattern,
               output_file_path.parent.mkdir(parents=True, exist_ok=True)
 
               minify_json_file(file_path, output_file_path)
-              saved_space = file_path.stat().st_size - output_file_path.stat().st_size
+              saved_space = start_size - output_file_path.stat().st_size
               saved_space_mb = saved_space / (1024 * 1024)
               total_saved_space += saved_space_mb
               tqdm.write(f"📦 Saved {saved_space_mb:.2f} MB for {output_file_name}")
