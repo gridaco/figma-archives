@@ -17,8 +17,9 @@ from colorama import Fore, Back, Style
 @click.option('--dir-images-archive', required=True, type=str, help='Path to images archive directory')
 @click.option('--sample', default=None, type=int, help='Number of samples to process')
 @click.option('--sample-all', is_flag=False, help='Process all available data')
-@click.option('--ensure-images', is_flag=False, help='Ensure images exists for files')
-def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample, sample_all, ensure_images):
+@click.option('--ensure-images', is_flag=True, default=False, help='Ensure images exists for files')
+@click.option('--skip-images', is_flag=True, default=False, help='Skip images copy for files')
+def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample, sample_all, ensure_images, skip_images):
     # Read index file
     with jsonlines.open(index, mode='r') as reader:
         # get id, link, title
@@ -86,12 +87,13 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
                 raise SamplerException(id, file_key, f"File not found for sample <{title}>")
 
             # Copy images
-            images_archive_dir = dir_images_archive / file_key
-            if images_archive_dir.exists():
-              shutil.copytree(images_archive_dir, output_dir / "images")
-            else:
-              if ensure_images:
-                raise OkException(id, file_key, f"Images not found for sample <{title}>")
+            if not skip_images:
+              images_archive_dir = dir_images_archive / file_key
+              if images_archive_dir.exists():
+                shutil.copytree(images_archive_dir, output_dir / "images")
+              else:
+                if ensure_images:
+                  raise OkException(id, file_key, f"Images not found for sample <{title}>")
 
             # Write meta.json
             with open(output_dir / "meta.json", "w") as f:
