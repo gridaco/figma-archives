@@ -90,7 +90,13 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
             if not skip_images:
               images_archive_dir = dir_images_archive / file_key
               if images_archive_dir.exists():
-                shutil.copytree(images_archive_dir, output_dir / "images")
+                # copy items under images_archive_dir to output_dir/images (files and directories)
+                # shutil.copytree(images_archive_dir, output_dir / "images") - this copies the directory itself
+                for item in images_archive_dir.iterdir():
+                  if item.is_file():
+                    shutil.copy(item, output_dir / item.name)
+                  elif item.is_dir():
+                    shutil.copytree(item, output_dir / item.name)
               else:
                 if ensure_images:
                   raise OkException(id, file_key, f"Images not found for sample <{title}>")
