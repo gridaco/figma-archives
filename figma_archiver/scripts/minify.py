@@ -43,15 +43,12 @@ def minify_json_file(input_file_path: Path, output_file_path: Path):
             tqdm.write(f"Restoring .tmp file to original file. {input_file_path}")
 
 
-DEFAULT_OUTPUT_PATTERN = '{key}.json'
-
-
 @click.command()
 @click.argument('input_dir', type=click.Path(exists=True, file_okay=False, dir_okay=True))
 @click.option('--index-dir', default=None, required=False, help='Optional directory containing index.json file and map.json used for sorting the files.', type=click.Path(exists=True, file_okay=False, dir_okay=True))
-@click.option('--pattern', default='*.json', help='Pattern to look for JSON files.')
+@click.option('--pattern', default='{key}.json', help='Pattern to look for JSON files.')
 @click.option('--output', default=None, help='Output directory. If not specified, use the input directory.')
-@click.option('--output-pattern', required=False, default=DEFAULT_OUTPUT_PATTERN, help='Pattern for the output file.')
+@click.option('--output-pattern', required=False, help='Pattern for the output file.')
 @click.option('--max', default=None, type=int, help='Maximum number of items to process.')
 @click.option('--shuffle', is_flag=True, help='Shuffle the target files for even distribution.')
 def minify_json_directory(input_dir, index_dir, pattern, output, output_pattern, max, shuffle):
@@ -61,8 +58,14 @@ def minify_json_directory(input_dir, index_dir, pattern, output, output_pattern,
     else:
         output = Path(output)
 
+    if output_pattern is None:
+        output_pattern = pattern
+
     output.mkdir(parents=True, exist_ok=True)
-    json_files = sorted(list(input_dir.glob(pattern)))
+
+    # format the patternt to glob.
+    pattern_glb = pattern.replace('{key}', '*')
+    json_files = sorted(list(input_dir.glob(pattern_glb)))
 
     # Check for minified files
     # check if there are already minified files (if the parent path is different)
@@ -70,11 +73,18 @@ def minify_json_directory(input_dir, index_dir, pattern, output, output_pattern,
     # to be more accurate, we actually have to check the patterns as well, but for simplicity, we will just check the parent path, otherwise, let it handle in the main loop
     if input_dir.resolve().samefile(output.resolve()):
         minified_files = set()
-        if output_pattern == DEFAULT_OUTPUT_PATTERN: ...
+        if output_pattern == pattern:
+            output_pattern = False
         else: ...
     else:
-      search_pattern = output_pattern.format(key="*")
-      minified_files = set(output.rglob(search_pattern))
+        if output_pattern is None:
+            output_pattern = pattern
+            # replace ** with {key}
+            # replace * with {key}
+            output_pattern = output_pattern.replace('**', '{key}')
+            output_pattern = output_pattern.replace('*', '{key}')
+        search_pattern = output_pattern.format(key="*")
+        minified_files = set(output.rglob(search_pattern))
     
     minified_files = {f.stem for f in minified_files}
 
@@ -94,9 +104,13 @@ def minify_json_directory(input_dir, index_dir, pattern, output, output_pattern,
           start_size = file_path.stat().st_size
 
           already_minified = False
-          file_key = file_path.stem
-          output_file_name = Path(output_pattern.format(key=file_key))
-          output_file_path = output / output_file_name
+          if output_pattern is False: # same parent path
+              output_file_name = file_path.name
+              output_file_path = file_path
+          else:
+              file_key = file_path.stem
+              output_file_name = Path(output_pattern.format(key=file_key))
+              output_file_path = output / output_file_name
 
           # check if input and output are same (overwrite)
           if output_file_path.exists() and file_path.resolve().samefile(output_file_path.resolve()):
@@ -107,7 +121,7 @@ def minify_json_directory(input_dir, index_dir, pattern, output, output_pattern,
                       already_minified = True
 
           if already_minified:
-              tqdm.write(f"📦 Skipping {output_file_name} (already minified)")
+              tqdm.write(f"📦 Skipping {output_file_path} (already minified)")
           else:
               output_file_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -115,7 +129,7 @@ def minify_json_directory(input_dir, index_dir, pattern, output, output_pattern,
               saved_space = start_size - output_file_path.stat().st_size
               saved_space_mb = saved_space / (1024 * 1024)
               total_saved_space += saved_space_mb
-              tqdm.write(f"📦 Saved {saved_space_mb:.2f} MB for {output_file_name}")
+              tqdm.write(f"📦 Saved {saved_space_mb:.2f} MB for {output_file_path}")
               progress.desc = f"📦 Saved {(total_saved_space / 1024):.2f} GB"
 
 

@@ -43,7 +43,7 @@ This script is to minify the JSON files, so we can save some space.
 ```bash
 python3 ./scripts/minify.py\
   ./downloads\
-  --pattern='*.json'\
+  --pattern='{key}.json'\
   --output='./downloads/minified'\
   --output-pattern='{key}.min.json'\
   --max=1000
@@ -58,7 +58,7 @@ Note that this will handle all json files with matching pattern, so make sure yo
 # Example usage on external drive
 python3 ./scripts/minify.py\
   /Volumes/WDB2TB/Data/figma-scraper-archives\
-  --pattern='*.json'\
+  --pattern='{key}.json'\
   --output=/Volumes/WDB2TB/Data/figma-scraper-archives.min\
   --output-pattern='{key}.json'
 ```
