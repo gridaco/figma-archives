@@ -19,3 +19,7 @@ This prints out the status of overall scraping, and the brief stats of the crawl
 ```bash
 python3 stats.py ./path-to-samples-made-by-sampler
 ```
+
+## Todo
+
+- All listed above
