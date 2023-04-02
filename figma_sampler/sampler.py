@@ -17,8 +17,8 @@ from colorama import Fore, Back, Style
 @click.option('--dir-images-archive', required=True, type=str, help='Path to images archive directory')
 @click.option('--sample', default=None, type=int, help='Number of samples to process')
 @click.option('--sample-all', is_flag=False, help='Process all available data')
-@click.option('--ensure-images', is_flag=False, help='Ensure images exists for files')
-@click.option('--skip-images', is_flag=False, help='Skip images copy for files')
+@click.option('--ensure-images', is_flag=True, default=False, help='Ensure images exists for files')
+@click.option('--skip-images', is_flag=True, default=False, help='Skip images copy for files')
 def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample, sample_all, ensure_images, skip_images):
     # Read index file
     with jsonlines.open(index, mode='r') as reader:
