@@ -8,3 +8,4 @@ backoff
 urllib3
 jsonlines
 colorama
+ijson
