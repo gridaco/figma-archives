@@ -35,7 +35,7 @@ def minify_json_directory(input_dir, pattern, output, output_pattern, max, shuff
         output = Path(output)
 
     output.mkdir(parents=True, exist_ok=True)
-    json_files = list(input_dir.glob(pattern))
+    json_files = sorted(list(input_dir.glob(pattern)))
 
     # Check for minified files
     search_pattern = output_pattern.format(key="*")
@@ -66,7 +66,7 @@ def minify_json_directory(input_dir, pattern, output, output_pattern, max, shuff
           output_file_path = output / output_file_name
 
           # check if input and output are same (overwrite)
-          if file_path.resolve().samefile(output_file_path.resolve()):
+          if output_file_path.exists() and file_path.resolve().samefile(output_file_path.resolve()):
               # check if the output file has been minified, by checking if it has only one line
               with output_file_path.open('r') as f:
                   if len(f.readlines()) == 1:
@@ -83,7 +83,7 @@ def minify_json_directory(input_dir, pattern, output, output_pattern, max, shuff
               saved_space_mb = saved_space / (1024 * 1024)
               total_saved_space += saved_space_mb
               tqdm.write(f"📦 Saved {saved_space_mb:.2f} MB for {output_file_name}")
-              progress.desc = f"📦 Saved {(total_saved_space / 1024):.3f} GB"
+              progress.desc = f"📦 Saved {(total_saved_space / 1024):.2f} GB"
 
 if __name__ == '__main__':
     minify_json_directory()
