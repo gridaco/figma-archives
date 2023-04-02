@@ -22,6 +22,9 @@ from functools import partial
 import queue
 from typing import List, Tuple
 import resource
+from PIL import Image
+import math
+import io
 
 
 
@@ -43,18 +46,19 @@ BOTTOM_POSITION = 24
 @click.option('--skip-canvas',  default=True, help="Skips the canvas while exporting images")
 @click.option('--no-fills',  default=False, help="Skips the download for Image fills")
 @click.option("--optimize", is_flag=True, help="Optimize images size (Now only applied to hash images)", default=False, type=click.BOOL)
+@click.option("--max-mb-hash", help="Max mb to be applied to has images (if optimize is true)", default=1, type=click.INT)
 @click.option("-t", "--figma-token", help="Figma API access token.", default=os.getenv("FIGMA_ACCESS_TOKEN"), type=str)
 @click.option("-src", '--source-dir', default="./downloads/*.json", help="Path to the JSON file")
 @click.option("-c", "--concurrency", help="Number of concurrent processes.", default=cpu_count(), type=int)
 @click.option("--skip", help="Number of files to skip (for dubugging).", default=0, type=int)
 @click.option("--shuffle", is_flag=True, help="Rather if to randomize the input for even distribution", default=False, type=click.BOOL)
-def main(dir, format, scale, depth, skip_canvas, no_fills, optimize, figma_token, source_dir, concurrency, skip, shuffle):
+def main(dir, format, scale, depth, skip_canvas, no_fills, optimize, max_mb_hash, figma_token, source_dir, concurrency, skip, shuffle):
     # progress bar position config
     global BOTTOM_POSITION
     BOTTOM_POSITION = concurrency * 2 + 5
 
     if optimize:
-        # TODO: optimize the hased image size to max 3mb (resize it automatically) - it is not requierd to retain its original size
+        # TODO: optimize the hased image size to max {max_mb_hash}mb (resize it automatically) - it is not requierd to retain its original size
         raise NotImplementedError("Optimization is not implemented yet.")
 
     # figma token
@@ -103,6 +107,8 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, optimize, figma_token
         'figma_token': figma_tokens[(_ + 1) % len(figma_tokens)],
         'format': format,
         'scale': scale,
+        'optimize': optimize,
+        'max_mb_hash': max_mb_hash,
         'depth': depth,
         'size': size_avg,
         'index': _,
@@ -123,7 +129,7 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, optimize, figma_token
     # finally wait for the download thread to finish
     download_thread.join()
 
-def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, skip_canvas: bool, no_fills: bool, figma_token: str, format: str, scale: int, depth: int, index: int, size: int, pbar: tqdm, concurrency: int):
+def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, skip_canvas: bool, no_fills: bool, figma_token: str, format: str, scale: int, optimize: bool, max_mb_hash: int, depth: int, index: int, size: int, pbar: tqdm, concurrency: int):
     # for key, json_file in files:
     for key, json_file in tqdm(files, desc=f"⚡️ {figma_token[:8]}", position=BOTTOM_POSITION-(index+4), leave=True, total=size):
         subdir: Path = root_dir / key
@@ -161,8 +167,10 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                     for hash_, url in image_fills.items()
                 ]
 
-                for pair in url_and_path_pairs:
-                  img_queue.put(pair)
+                # we don't use queue for has images
+                fetch_and_save_images(url_and_path_pairs, max_mb=max_mb_hash, optimize=optimize)
+                # for pair in url_and_path_pairs:
+                #   img_queue.put(pair)
             else:
                 ...
                 # tqdm.write(f"{images_dir} - Image fills already fetched")
@@ -298,16 +306,49 @@ def image_queue_handler(img_queue: queue.Queue, batch=64, timeout=3600):
 
     tqdm.write("✅ Image Archiving Complete")
 
-def fetch_and_save_images(url_and_path_pairs, position=5, num_threads=128):
+def fetch_and_save_images(url_and_path_pairs, optimize=False, max_mb=1, position=5, num_threads=64):
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
         futures = {executor.submit(download_image, url, path): (url, path) for url, path in url_and_path_pairs}
 
-        for future in tqdm(as_completed(futures), total=len(futures), desc=f"Downloading images (Utilizing {num_threads} threads)", position=position, leave=False):
+        if position is not None:
+            futures = tqdm(as_completed(futures), total=len(futures), desc=f"Downloading images (Utilizing {num_threads} threads)", position=position, leave=False)
+        else:
+            futures = as_completed(futures)
+
+        for future in futures:
             url, downloaded_path = future.result()
             if downloaded_path:
                 tqdm.write(f"☑ {url} → {downloaded_path}")
+                if optimize:
+                    optimize_image(downloaded_path, max_mb=max_mb)
             else:
                 tqdm.write(f"Failed to download image: {url}")
+
+def optimize_image(path, max_mb=1):
+    try:
+        max_size = max_mb * 1024 * 1024
+        target_bytes = max_size
+        if os.path.getsize(path) > max_size:
+            # Open the image
+            img = Image.open(path)
+            # Calculate the target number of bytes
+            # Get the current number of bytes
+            current_bytes = io.BytesIO()
+            img.save(current_bytes, format='PNG')
+            current_bytes = current_bytes.tell()
+            # Calculate the scale factor
+            scale_factor = math.sqrt(target_bytes / current_bytes)
+            # Calculate the new size
+            new_size = tuple(int(dim * scale_factor) for dim in img.size)
+            # Resize the image
+            img = img.resize(new_size, resample=Image.BICUBIC)
+            # Save the image
+            img.save(path, format='PNG')
+            return True
+        else:
+          return True
+    except Exception as e:
+        return False
 
 
 def fetch_file_images(file_key, token):
