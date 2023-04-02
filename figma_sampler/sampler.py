@@ -1,3 +1,4 @@
+import random
 from urllib.parse import urlparse
 import json
 import shutil
@@ -19,7 +20,8 @@ from colorama import Fore, Back, Style
 @click.option('--sample-all', is_flag=False, help='Process all available data')
 @click.option('--ensure-images', is_flag=True, default=False, help='Ensure images exists for files')
 @click.option('--skip-images', is_flag=True, default=False, help='Skip images copy for files')
-def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample, sample_all, ensure_images, skip_images):
+@click.option('--shuffle', is_flag=True, default=False, help='Shuffle the index')
+def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample, sample_all, ensure_images, skip_images, shuffle):
     # Read index file
     with jsonlines.open(index, mode='r') as reader:
         # get id, link, title
@@ -55,6 +57,10 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
 
     # remove the already-sampled files from the available list
     available = [x for x in available if x[0] not in completes]
+
+    # shuffle the available list
+    if shuffle:
+        random.shuffle(available)
 
     # Calculate sample size
     if sample_all:
