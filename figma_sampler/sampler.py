@@ -26,9 +26,10 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
     # check if index is a directory
     index = Path(index)
     if index.is_dir():
-        index = index / "index.json"
-        map = index / "map.json"
-        meta = index / "meta.json"
+        index_dir = index
+        index = index_dir / "index.json"
+        map = index_dir / "map.json"
+        meta = index_dir / "meta.json"
     else:
         # ensure map and meta are provided
         if map is None or meta is None:
@@ -64,6 +65,10 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
     # locate the already-sampled files with finding map.json files
     # get the ids of the already-sampled files
     completes = [x.parent.name for x in output.glob('**/map.json')]
+    # if file.json exists, but map.json does not, it means the file is malformed
+    malforms = [x.parent.name for x in output.glob('**/file.json') if not (x.parent / 'map.json').exists()]
+
+    tqdm.write(f"📂 {output} already contains {len(completes)} samples (will be skipped), {len(malforms)} malformed samples (will be replaced)")
 
     # pre-validate the targtes (check if drafted file exists for community lunk)
     available = [(id, link, _) for id, link, _ in index_data
