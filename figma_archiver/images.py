@@ -42,15 +42,20 @@ BOTTOM_POSITION = 24
 @click.option("-d", '--depth',  default=None, help="Layer depth to go recursively", type=click.INT)
 @click.option('--skip-canvas',  default=True, help="Skips the canvas while exporting images")
 @click.option('--no-fills',  default=False, help="Skips the download for Image fills")
+@click.option("--optimize", is_flag=True, help="Optimize images size (Now only applied to hash images)", default=False, type=click.BOOL)
 @click.option("-t", "--figma-token", help="Figma API access token.", default=os.getenv("FIGMA_ACCESS_TOKEN"), type=str)
 @click.option("-src", '--source-dir', default="./downloads/*.json", help="Path to the JSON file")
 @click.option("-c", "--concurrency", help="Number of concurrent processes.", default=cpu_count(), type=int)
 @click.option("--skip", help="Number of files to skip (for dubugging).", default=0, type=int)
 @click.option("--shuffle", is_flag=True, help="Rather if to randomize the input for even distribution", default=False, type=click.BOOL)
-def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_dir, concurrency, skip, shuffle):
+def main(dir, format, scale, depth, skip_canvas, no_fills, optimize, figma_token, source_dir, concurrency, skip, shuffle):
     # progress bar position config
     global BOTTOM_POSITION
     BOTTOM_POSITION = concurrency * 2 + 5
+
+    if optimize:
+        # TODO: optimize the hased image size to max 3mb (resize it automatically) - it is not requierd to retain its original size
+        raise NotImplementedError("Optimization is not implemented yet.")
 
     # figma token
     if figma_token.startswith("[") and figma_token.endswith("]"):
