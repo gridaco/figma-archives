@@ -46,8 +46,8 @@ BOTTOM_POSITION = 24
 @click.option("-src", '--source-dir', default="./downloads/*.json", help="Path to the JSON file")
 @click.option("-c", "--concurrency", help="Number of concurrent processes.", default=cpu_count(), type=int)
 @click.option("--skip", help="Number of files to skip (for dubugging).", default=0, type=int)
-@click.option("--rand", is_flag=True, help="Rather if to randomize the input for even distribution", default=False, type=click.BOOL)
-def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_dir, concurrency, skip, rand):
+@click.option("--shuffle", is_flag=True, help="Rather if to randomize the input for even distribution", default=False, type=click.BOOL)
+def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_dir, concurrency, skip, shuffle):
     # progress bar position config
     global BOTTOM_POSITION
     BOTTOM_POSITION = concurrency * 2 + 5
@@ -68,7 +68,7 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, figma_token, source_d
     file_keys = [Path(file).stem for file in json_files]
 
     # randomize for even distribution
-    if rand:
+    if shuffle:
       shuffled = [item for item in range(len(json_files))]
       random.shuffle(shuffled)
       json_files = [json_files[i] for i in shuffled]
