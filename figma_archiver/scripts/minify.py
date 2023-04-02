@@ -1,20 +1,23 @@
 import json
 import click
-import ijson
 import random
 from tqdm import tqdm
 from pathlib import Path
 
 
-def minify_json_file(input_file_path, output_file_path):
+def minify_json_file(input_file_path: Path, output_file_path: Path):
     try:
         with input_file_path.open('r') as input_file, output_file_path.open('w') as output_file:
-            parser = ijson.parse(input_file)
-            json.dump({k: v for k, v in parser if not isinstance(
-                v, ijson.common.JSONError)}, output_file, separators=(',', ':'))
+            data = json.load(input_file)
+            json.dump(data, output_file, separators=(',', ':'))
+    except KeyboardInterrupt:
+        output_file_path.unlink(missing_ok=True)
+        tqdm("Keyboard interrupt detected. Removing incomplete output file.")
+        raise
     except Exception as e:
         output_file_path.unlink(missing_ok=True)
         raise e
+
 
 
 @click.command()
@@ -45,17 +48,21 @@ def minify_json_directory(input_dir, pattern, output, output_pattern, max, shuff
     if max is not None:
         json_files = json_files[:max]
 
-    for file_path in tqdm(json_files, desc='Minifying JSON files'):
-        file_key = file_path.stem
-        output_file_name = Path(output_pattern.format(key=file_key))
-        output_file_path = output / output_file_name
+    total_saved_space = 0
+    with tqdm(json_files, desc='📦') as progress:
+      for file_path in progress:
+          file_key = file_path.stem
+          output_file_name = Path(output_pattern.format(key=file_key))
+          output_file_path = output / output_file_name
 
-        output_file_path.parent.mkdir(parents=True, exist_ok=True)
+          output_file_path.parent.mkdir(parents=True, exist_ok=True)
 
-        minify_json_file(file_path, output_file_path)
-        saved_space = file_path.stat().st_size - output_file_path.stat().st_size
-        tqdm.write(f"Saved {saved_space} bytes for {output_file_name}")
-
+          minify_json_file(file_path, output_file_path)
+          saved_space = file_path.stat().st_size - output_file_path.stat().st_size
+          saved_space_mb = saved_space / (1024 * 1024)
+          total_saved_space += saved_space_mb
+          tqdm.write(f"📦 Saved {saved_space_mb:.2f} MB for {output_file_name}")
+          progress.desc = f"📦 Saved {(total_saved_space / 1024):.3f} GB"
 
 if __name__ == '__main__':
     minify_json_directory()

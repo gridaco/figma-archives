@@ -33,3 +33,32 @@ We use requests for API call, (since it's a simple GET request, we don't need to
 ```
 
 ```
+
+## Scripts
+
+### `minify.py`
+
+This script is to minify the JSON files, so we can save some space.
+
+```bash
+python3 ./scripts/minify.py\
+  ./downloads\
+  --pattern='*.json'\
+  --output='./downloads/minified'\
+  --output-pattern='{key}.min.json'\
+  --max=1000
+
+  # --output-pattern='{key}.min.json' to create new with .min.json
+  # --output-pattern='{key}.json' to replace
+```
+
+Note that this will handle all json files with matching pattern, so make sure you have the right pattern and the directory is correct.
+
+```bash
+# Example usage on external drive
+python3 ./scripts/minify.py\
+  /Volumes/WDB2TB/Data/figma-scraper-archives\
+  --pattern='*.json'\
+  --output=/Volumes/WDB2TB/Data/figma-scraper-archives.min\
+  --output-pattern='{key}.json'
+```
