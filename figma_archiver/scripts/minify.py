@@ -1,8 +1,10 @@
+import jsonlines
 import json
 import click
 import random
 from tqdm import tqdm
 from pathlib import Path
+from urllib.parse import urlsplit
 
 
 def minify_json_file(input_file_path: Path, output_file_path: Path):
@@ -41,15 +43,18 @@ def minify_json_file(input_file_path: Path, output_file_path: Path):
             tqdm.write(f"Restoring .tmp file to original file. {input_file_path}")
 
 
+DEFAULT_OUTPUT_PATTERN = '{key}.json'
+
 
 @click.command()
 @click.argument('input_dir', type=click.Path(exists=True, file_okay=False, dir_okay=True))
+@click.option('--index-dir', default=None, required=False, help='Optional directory containing index.json file and map.json used for sorting the files.', type=click.Path(exists=True, file_okay=False, dir_okay=True))
 @click.option('--pattern', default='*.json', help='Pattern to look for JSON files.')
 @click.option('--output', default=None, help='Output directory. If not specified, use the input directory.')
-@click.option('--output-pattern', default='{key}.min.json', help='Pattern for the output file.')
+@click.option('--output-pattern', required=False, default=DEFAULT_OUTPUT_PATTERN, help='Pattern for the output file.')
 @click.option('--max', default=None, type=int, help='Maximum number of items to process.')
 @click.option('--shuffle', is_flag=True, help='Shuffle the target files for even distribution.')
-def minify_json_directory(input_dir, pattern, output, output_pattern, max, shuffle):
+def minify_json_directory(input_dir, index_dir, pattern, output, output_pattern, max, shuffle):
     input_dir = Path(input_dir)
     if not output:
         output = input_dir
@@ -60,21 +65,26 @@ def minify_json_directory(input_dir, pattern, output, output_pattern, max, shuff
     json_files = sorted(list(input_dir.glob(pattern)))
 
     # Check for minified files
-    search_pattern = output_pattern.format(key="*")
     # check if there are already minified files (if the parent path is different)
     # if the parent path is the same, we will check if the file has been minified, in the main loop
     # to be more accurate, we actually have to check the patterns as well, but for simplicity, we will just check the parent path, otherwise, let it handle in the main loop
     if input_dir.resolve().samefile(output.resolve()):
         minified_files = set()
+        if output_pattern == DEFAULT_OUTPUT_PATTERN: ...
+        else: ...
     else:
+      search_pattern = output_pattern.format(key="*")
       minified_files = set(output.rglob(search_pattern))
     
     minified_files = {f.stem for f in minified_files}
-    json_files = [f for f in json_files if f.stem not in minified_files]
+
+    if index_dir:        
+        json_files = sort_with_index(json_files=json_files, index_dir=index_dir)
 
     if shuffle:
         random.shuffle(json_files)
 
+    json_files = [f for f in json_files if f.stem not in minified_files]
     if max is not None:
         json_files = json_files[:max]
 
@@ -106,6 +116,66 @@ def minify_json_directory(input_dir, pattern, output, output_pattern, max, shuff
               total_saved_space += saved_space_mb
               tqdm.write(f"📦 Saved {saved_space_mb:.2f} MB for {output_file_name}")
               progress.desc = f"📦 Saved {(total_saved_space / 1024):.2f} GB"
+
+
+def sort_with_index(json_files, index_dir):
+    """
+    The arguments and how it is used
+    - index_dir - contains a index.json and map.json
+    - index.json - a jsonl file containing the objects with "id" and "link" of the community file
+    - map.json - a json file containing the mapping of the {community-file-link : drafted-file-url} # we can extract the id from the link and url with parse_id
+    - json_files - the list of input json files as a list of path, format: ./a/b/.../{id}.json
+
+    The sorting
+    1. get the list of ids from index.json
+    2. get the mapping of id to filekey from map.json
+    3. sort the mapping based on the order of ids in index.json
+    4. sort the json_files based on the order of filekeys sorted mapping (3)
+
+    As a result, the json_files will be sorted based on the order of ids in index.json (where the json_files did not have access to original file order in the index)
+    """
+
+    raise NotImplementedError("This function is not implemented yet")
+
+    # make sure index.json and map.json exists
+    index_dir = Path(index_dir)
+    index_file = index_dir / 'index.json'
+    map_file = index_dir / 'map.json'
+    if not index_file.exists() or not map_file.exists():
+        raise Exception(f"index.json or map.json not found in {index_dir}")
+    
+    with jsonlines.open(index_dir / 'index.json') as reader:
+        index_ids = [x['id'] for x in reader]
+         # Sort the files based on the index
+        with map_file.open('r') as f:
+            map_data = json.load(f)
+            # Parse and remake the map
+            map_data = {parse_id(k): parse_id(v) for k, v in map_data.items()}
+
+            # Reverse the map_data to have file keys as keys and community IDs as values
+            map_data = {v: k for k, v in map_data.items()}
+
+            # Create a dictionary to map file keys to json_files
+            file_key_to_json_file = {f.stem: f for f in json_files}
+
+            # Sort the json_files based on the order of index_ids
+            sorted_json_files = [
+                file_key_to_json_file[map_data[id]] for id in index_ids if id in map_data
+            ]
+            
+            return sorted_json_files
+
+
+
+def parse_id(url):
+    """
+    parse the id from both community link and file url
+    https://www.figma.com/..xxxx/file/:id
+
+    This will only work for cleaned url.
+    """
+    result = urlsplit(url)
+    return Path(result.path).name
 
 if __name__ == '__main__':
     minify_json_directory()
