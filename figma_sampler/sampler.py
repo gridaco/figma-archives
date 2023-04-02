@@ -1,3 +1,4 @@
+import random
 from urllib.parse import urlparse
 import json
 import shutil
@@ -19,7 +20,8 @@ from colorama import Fore, Back, Style
 @click.option('--sample-all', is_flag=False, help='Process all available data')
 @click.option('--ensure-images', is_flag=True, default=False, help='Ensure images exists for files')
 @click.option('--skip-images', is_flag=True, default=False, help='Skip images copy for files')
-def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample, sample_all, ensure_images, skip_images):
+@click.option('--shuffle', is_flag=True, default=False, help='Shuffle the index')
+def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample, sample_all, ensure_images, skip_images, shuffle):
     # Read index file
     with jsonlines.open(index, mode='r') as reader:
         # get id, link, title
@@ -56,6 +58,10 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
     # remove the already-sampled files from the available list
     available = [x for x in available if x[0] not in completes]
 
+    # shuffle the available list
+    if shuffle:
+        random.shuffle(available)
+
     # Calculate sample size
     if sample_all:
         sample_size = len(available)
@@ -90,7 +96,13 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
             if not skip_images:
               images_archive_dir = dir_images_archive / file_key
               if images_archive_dir.exists():
-                shutil.copytree(images_archive_dir, output_dir / "images")
+                # copy items under images_archive_dir to output_dir/images (files and directories)
+                # shutil.copytree(images_archive_dir, output_dir / "images") - this copies the directory itself
+                for item in images_archive_dir.iterdir():
+                  if item.is_file():
+                    shutil.copy(item, output_dir / item.name)
+                  elif item.is_dir():
+                    shutil.copytree(item, output_dir / item.name)
               else:
                 if ensure_images:
                   raise OkException(id, file_key, f"Images not found for sample <{title}>")
