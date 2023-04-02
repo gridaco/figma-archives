@@ -10,22 +10,36 @@ from colorama import Fore, Back, Style
 
 
 @click.command()
-@click.option('--index', required=True, type=click.Path(exists=True), help='Path to index file (JSONL)')
-@click.option('--map', required=True, type=click.Path(exists=True), help='Path to map file (JSON)')
-@click.option('--meta', required=True, type=click.Path(exists=True), help='Path to meta file (JSON)')
+@click.option('--index', required=True, type=click.Path(exists=True), help='Path to index file (JSONL) or index directory with (index.json, map.json, meta.json)')
+@click.option('--map', required=False, type=click.Path(exists=True), help='Path to map file (JSON)')
+@click.option('--meta', required=False, type=click.Path(exists=True), help='Path to meta file (JSON)')
 @click.option('--output', required=True, type=click.Path(), help='Path to output directory')
 @click.option('--dir-files-archive', required=True, type=str, help='Path to files archive directory')
 @click.option('--dir-images-archive', required=True, type=str, help='Path to images archive directory')
 @click.option('--sample', default=None, type=int, help='Number of samples to process')
 @click.option('--sample-all', is_flag=False, help='Process all available data')
 @click.option('--ensure-images', is_flag=True, default=False, help='Ensure images exists for files')
+@click.option('--ensure-meta', is_flag=True, default=True, help='Ensure meta exists for files')
 @click.option('--skip-images', is_flag=True, default=False, help='Skip images copy for files')
 @click.option('--shuffle', is_flag=True, default=False, help='Shuffle the index')
-def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample, sample_all, ensure_images, skip_images, shuffle):
+def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample, sample_all, ensure_images, ensure_meta, skip_images, shuffle):
+    # check if index is a directory
+    index = Path(index)
+    if index.is_dir():
+        index = index / "index.json"
+        map = index / "map.json"
+        meta = index / "meta.json"
+    else:
+        # ensure map and meta are provided
+        if map is None or meta is None:
+            raise click.UsageError(
+                'If index is not a directory, map and meta must be provided')
+
     # Read index file
     with jsonlines.open(index, mode='r') as reader:
         # get id, link, title
         index_data = [(obj["id"], obj["link"], obj["title"]) for obj in reader]
+
 
     # Read map file
     with open(map, 'r') as f:
@@ -111,9 +125,12 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
             with open(output_dir / "meta.json", "w") as f:
                 try:
                   meta = meta_data[id]
+                  json.dump(meta, f)
                 except KeyError:
-                  raise OkException(id, file_key, f"Meta not found for sample <{title}>")
-                json.dump(meta, f)
+                  if ensure_meta:
+                    raise OkException(id, file_key, f"Meta not found for sample <{title}>")
+                  else:
+                    continue
 
             # Write map.json
             with open(output_dir / "map.json", "w") as f:
