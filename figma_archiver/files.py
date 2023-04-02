@@ -36,7 +36,7 @@ def is_valid_json_file(file: Path):
 
 
 def save_file_locally(args):
-    file_key, figma_token, output_path, validate = args
+    file_key, figma_token, output_path, validate, minify = args
     headers = {
         "X-Figma-Token": figma_token
     }
@@ -53,7 +53,10 @@ def save_file_locally(args):
         if response.status_code == 200:
             json_data = response.json()
             with open(output_path / f"{file_key}.json", "w") as output_file:
-                json.dump(json_data, output_file, indent=4)
+                if minify:
+                    json.dump(json_data, output_file, separators=(',', ':'))
+                else:
+                    json.dump(json_data, output_file, indent=4)
         elif response.status_code == 429:
             retry_after = int(response.headers.get("Retry-After", 60))
             time.sleep(retry_after)
@@ -75,7 +78,8 @@ def save_file_locally(args):
 @click.option("-o", "--output-dir", help="Output directory to save the JSON files.", default="downloads", type=click.Path(file_okay=False))
 @click.option("-c", "--concurrency", help="Number of concurrent processes.", default=cpu_count(), type=int)
 @click.option('--validate', is_flag=True, help="Rather to validate the json response (downloading and already archived ones).", default=False, type=click.BOOL)
-def main(figma_file_id, figma_token, output_dir, concurrency, validate):
+@click.option('--minify', is_flag=True, help="Minify the json response with no indents, one line.", default=True, type=click.BOOL)
+def main(figma_file_id, figma_token, output_dir, concurrency, validate, minify):
     if not figma_token:
         print(
             "Please set the FIGMA_ACCESS_TOKEN environment variable or provide it with the -t option.")
@@ -110,7 +114,7 @@ def main(figma_file_id, figma_token, output_dir, concurrency, validate):
         f'archiving {len(file_keys_to_download)} files with {concurrency} processes')
     try:
         with Pool(concurrency) as pool:
-            results = list(tqdm(pool.imap_unordered(save_file_locally, [(file_key, figma_token, output_path, validate) for file_key in file_keys_to_download]), total=len(
+            results = list(tqdm(pool.imap_unordered(save_file_locally, [(file_key, figma_token, output_path, validate, minify) for file_key in file_keys_to_download]), total=len(
                 file_keys_to_download), desc="Downloading Figma files"))
     except KeyboardInterrupt:
         tqdm.write("\nInterrupted by user. Terminating...")
