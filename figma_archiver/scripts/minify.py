@@ -6,17 +6,39 @@ from pathlib import Path
 
 
 def minify_json_file(input_file_path: Path, output_file_path: Path):
+    is_replacing = input_file_path.resolve().samefile(output_file_path.resolve())
     try:
-        with input_file_path.open('r') as input_file, output_file_path.open('w') as output_file:
-            data = json.load(input_file)
-            json.dump(data, output_file, separators=(',', ':'))
+        with input_file_path.open('r') as input_file:
+            # if the input and output are the same (replace), create a tmp file called {input_file_path}.tmp
+            # then rename it to {input_file_path} after it's done, after removing the original file
+            if is_replacing:
+              tmp_file_path = input_file_path.with_suffix('.tmp')
+              # write tmp file
+              with tmp_file_path.open('w') as output_file:
+                  data = json.load(input_file)
+                  json.dump(data, output_file, separators=(',', ':'))
+              # remove original file
+              input_file_path.unlink()
+              # rename tmp file to original file
+              tmp_file_path.rename(input_file_path)
+            else:
+                with output_file_path.open('w') as output_file:
+                    data = json.load(input_file)
+                    json.dump(data, output_file, separators=(',', ':'))
     except KeyboardInterrupt:
-        output_file_path.unlink(missing_ok=True)
-        tqdm("Keyboard interrupt detected. Removing incomplete output file.")
+        if not is_replacing:
+          tmp_file_path.unlink(missing_ok=True)
+          tqdm.write("Keyboard interrupt detected. Removing incomplete output file.")
         raise
     except Exception as e:
-        output_file_path.unlink(missing_ok=True)
+        if not is_replacing: output_file_path.unlink(missing_ok=True)
         raise e
+    finally:
+        # it can cause loss of original file if interrupted
+        # if .tmp file found and input_file_path not found, rename .tmp file to input_file_path
+        if is_replacing and not input_file_path.exists() and tmp_file_path.exists():
+            tmp_file_path.rename(input_file_path)
+            tqdm.write(f"Restoring .tmp file to original file. {input_file_path}")
 
 
 
