@@ -39,7 +39,8 @@ API_BASE_URL = "https://api.figma.com/v1"
 BOTTOM_POSITION = 24
 
 @click.command()
-@click.option("-dir", default="./downloads", type=click.Path(exists=True), help="Image format to bake the layers")
+@click.option("-v", "--version", default=0, type=click.INT, help="Version number to specify cache - update for new versions")
+@click.option("-dir", default="./downloads", type=click.Path(exists=True, file_okay=False, dir_okay=True), help="Directory containing the JSON files")
 @click.option("-fmt", '--format',  default="png", help="Image format to bake the layers")
 @click.option("-s", '--scale', default="1", help="Image scale")
 @click.option("-d", '--depth',  default=None, help="Layer depth to go recursively", type=click.INT)
@@ -52,7 +53,7 @@ BOTTOM_POSITION = 24
 @click.option("-c", "--concurrency", help="Number of concurrent processes.", default=cpu_count(), type=int)
 @click.option("--skip", help="Number of files to skip (for dubugging).", default=0, type=int)
 @click.option("--shuffle", is_flag=True, help="Rather if to randomize the input for even distribution", default=False, type=click.BOOL)
-def main(dir, format, scale, depth, skip_canvas, no_fills, optimize, max_mb_hash, figma_token, source_dir, concurrency, skip, shuffle):
+def main(version, dir, format, scale, depth, skip_canvas, no_fills, optimize, max_mb_hash, figma_token, source_dir, concurrency, skip, shuffle):
     # progress bar position config
     global BOTTOM_POSITION
     BOTTOM_POSITION = concurrency * 2 + 5
@@ -121,7 +122,7 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, optimize, max_mb_hash
 
     tqdm.write("All done!")
     # Signal the handler to stop by adding a None item
-    img_queue.put(('EOD', 'EOD'))
+    img_queue.put(('EOD', 'EOD', None))
     # finally wait for the download thread to finish
     download_thread.join()
 
@@ -135,7 +136,6 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
         file_data = read_file_data(json_file)
 
         if file_data:
-          tqdm.write(f"☐ {subdir}")
           if depth is not None:
               depth = int(depth)
           # fetch and save thumbnail (if not already downloaded)
@@ -166,7 +166,7 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                 # we don't use queue for has images
                 fetch_and_save_images(url_and_path_pairs, max_mb=max_mb_hash, optimize=optimize)
                 # for pair in url_and_path_pairs:
-                #   img_queue.put(pair)
+                #   img_queue.put(pair + (max_mb_hash,))
             else:
                 ...
                 # tqdm.write(f"{images_dir} - Image fills already fetched")
@@ -188,7 +188,7 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
           if node_ids_to_fetch:
               # tqdm.write(f"Fetching {len(node_ids_to_fetch)} of {len(node_ids)} layer images...")
               layer_images = fetch_node_images(
-                  key, node_ids_to_fetch, scale, format, token=figma_token, position=BOTTOM_POSITION-(concurrency+index+5), conncurrency=concurrency)
+                  key, node_ids_to_fetch, scale, format, token=figma_token, position=BOTTOM_POSITION-((concurrency*2)+index), conncurrency=concurrency)
               url_and_path_pairs = [
                   (
                       url,
@@ -200,7 +200,7 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                   for node_id, url in layer_images.items()
               ]
               for pair in url_and_path_pairs:
-                  img_queue.put(pair)
+                  img_queue.put(pair + (None,))
           else:
               # tqdm.write(f"{images_dir} - Layer images already fetched")
               ...
@@ -234,7 +234,7 @@ def requests_retry_session(
     backoff.expo, (requests.exceptions.RequestException, SSLError), max_tries=5,
     logger=logging.getLogger('backoff').addHandler(logging.StreamHandler())
 )
-def download_image(url, output_path, timeout=10):
+def download_image(url, output_path, max_mb=None, timeout=10):
     if url is None:
         return None, None
     try:
@@ -243,11 +243,17 @@ def download_image(url, output_path, timeout=10):
         with open(output_path, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
+            f.close()
+
+        if max_mb is not None and max_mb > 0:
+            success, saved = optimize_image(output_path, max_mb=max_mb)
+            if (success):
+                tqdm.write(f"☑ {fixstr(f'Optimized - saved {(saved / 1024 / 1024):.2f}MB')}... → {output_path}")
         return url, output_path
     # check if 403 Forbidden
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 403:
-            log_error(f"☒ Forbidden (Expired): {url}", print=True)
+            log_error(f"☒ {fixstr(f'Forbidden (Expired): {url}')}", print=True)
             return None, None
         else:
             tqdm.write(f"☒ Error downloading {url}: {e}")
@@ -257,9 +263,9 @@ def download_image(url, output_path, timeout=10):
         return None, None
 
 
-def download_image_with_progress_bar(url_path, progress):
-    url, path = url_path
-    download_image(url, path)
+def download_image_with_progress_bar(item, progress):
+    url, path, max_mb = item
+    download_image(url, path, max_mb=max_mb)
     progress.update(1)
 
 def image_queue_handler(img_queue: queue.Queue, batch=64, timeout=3600):
@@ -276,12 +282,12 @@ def image_queue_handler(img_queue: queue.Queue, batch=64, timeout=3600):
 
         while len(items_to_process) < batch:
             try:
-                url, path = img_queue.get(timeout=1)
+                url, path, max_mb = img_queue.get(timeout=1)
                 if url == 'EOD':  # Check for sentinel value ('EOD', 'EOD')
                     break
                 
                 if url is not None:
-                  items_to_process.append((url, path))
+                  items_to_process.append((url, path, max_mb))
                   total += 1
                   progress.desc = f"📭 ({total}/{len(items_to_process)}/{batch}/{total}/{total+img_queue.qsize()})"
                   batch_start_time = time.time()  # Update the batch start time
@@ -310,9 +316,9 @@ def image_queue_handler(img_queue: queue.Queue, batch=64, timeout=3600):
 
     tqdm.write("✅ Image Archiving Complete")
 
-def fetch_and_save_images(url_and_path_pairs, optimize=False, max_mb=1, position=5, num_threads=64):
+def fetch_and_save_images(url_and_path_pairs, max_mb=1, position=5, num_threads=64):
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
-        futures = {executor.submit(download_image, url, path): (url, path) for url, path in url_and_path_pairs}
+        futures = {executor.submit(download_image, url, path, max_mb): (url, path) for url, path in url_and_path_pairs}
 
         if position is not None:
             futures = tqdm(as_completed(futures), total=len(futures), desc=f"Downloading images (Utilizing {num_threads} threads)", position=position, leave=False)
@@ -323,16 +329,28 @@ def fetch_and_save_images(url_and_path_pairs, optimize=False, max_mb=1, position
             url, downloaded_path = future.result()
             if downloaded_path:
                 tqdm.write(f"☑ {url} → {downloaded_path}")
-                if optimize:
+                if max_mb is not None and max_mb > 0:
                     optimize_image(downloaded_path, max_mb=max_mb)
             else:
                 tqdm.write(f"Failed to download image: {url}")
 
+def fixstr(str, n=64):
+    """
+    if str is longer than n, return first n characters
+    if str is shorter than n, return str with spaces added to end
+    """
+    if len(str) > n:
+        return str[:n]
+    else:
+        return str + " " * (n - len(str))
+
+
 def optimize_image(path, max_mb=1):
     try:
+        startsize = os.path.getsize(path)
         max_size = max_mb * 1024 * 1024
         target_bytes = max_size
-        if os.path.getsize(path) > max_size:
+        if startsize > max_size:
             # Open the image
             img = Image.open(path)
             # Calculate the target number of bytes
@@ -347,12 +365,16 @@ def optimize_image(path, max_mb=1):
             # Resize the image
             img = img.resize(new_size, resample=Image.BICUBIC)
             # Save the image
-            img.save(path, format='PNG')
-            return True
+            img.save(current_bytes, format='PNG')
+            
+            endsize = os.path.getsize(path)
+            saved = startsize - endsize
+            return True, saved
         else:
-          return True
+          return None, None
     except Exception as e:
-        return False
+        tqdm.write(f"☒ Error optimizing {path}: {e}")
+        return False, 0
 
 
 def fetch_file_images(file_key, token):
