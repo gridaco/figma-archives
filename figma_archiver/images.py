@@ -144,7 +144,7 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
           if depth is not None:
               depth = int(depth)
           # fetch and save thumbnail (if not already downloaded)
-          if not (subdir / "thumbnail.png").is_file():
+          if not (subdir / "thumbnail.png").is_file() and not no_download:
             thumbnail_url = file_data["thumbnailUrl"]
             download_image(thumbnail_url, subdir / "thumbnail.png")
             # tqdm.write(f"Saved thumbnail to {subdir / 'thumbnail.png'}")
