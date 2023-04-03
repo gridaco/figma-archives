@@ -248,8 +248,16 @@ def download_image(url, output_path, timeout=10):
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
         return url, output_path
+    # check if 403 Forbidden
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 403:
+            log_error(f"☒ Forbidden (Expired): {url}", print=True)
+            return None, None
+        else:
+            tqdm.write(f"☒ Error downloading {url}: {e}")
+            return None, None
     except Exception as e:
-        tqdm.write(f"Error downloading {url}: {e}")
+        tqdm.write(f"☒ Error downloading {url}: {e}")
         return None, None
 
 

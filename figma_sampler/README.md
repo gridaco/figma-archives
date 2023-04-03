@@ -51,6 +51,7 @@ Once complete, the output directory will be populated with the following files.
 **Example**
 
 ```bash
+# sampling 5k.min
 python3 sampler.py\
   --index='../data/samples-5k/index.json'\
   --map='../data/samples-5k/map.json'\
@@ -59,4 +60,11 @@ python3 sampler.py\
   --dir-files-archive='/Volumes/WDB2TB/Data/figma-scraper-archives'\
   --dir-images-archive='/Volumes/WDB2TB/Data/figma-scraper-image-archives'\
   --sample=5000
+
+# sampling for archives (all)
+python3 sampler.py\
+  --index='../data/latest'\
+  --output='/Volumes/WDB2TB/Data/figma-archives'\
+  --dir-files-archive='/Volumes/WDB2TB/Data/figma-scraper-archives'\
+  --dir-images-archive='/Volumes/WDB2TB/Data/figma-scraper-image-archives'\
 ```
