@@ -64,6 +64,9 @@ def main(version, dir, format, scale, depth, skip_canvas, no_fills, optimize, ma
     else:
       figma_tokens = [figma_token]
 
+    if not optimize:
+      max_mb_hash = 0
+
     img_queue = queue.Queue()
     root_dir = Path(dir)
 
@@ -164,7 +167,7 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                 ]
 
                 # we don't use queue for has images
-                fetch_and_save_images(url_and_path_pairs, max_mb=max_mb_hash, optimize=optimize)
+                fetch_and_save_images(url_and_path_pairs, max_mb=max_mb_hash)
                 # for pair in url_and_path_pairs:
                 #   img_queue.put(pair + (max_mb_hash,))
             else:
@@ -366,7 +369,7 @@ def optimize_image(path, max_mb=1):
             img = img.resize(new_size, resample=Image.BICUBIC)
             # Save the image
             img.save(current_bytes, format='PNG')
-            
+
             endsize = os.path.getsize(path)
             saved = startsize - endsize
             return True, saved
