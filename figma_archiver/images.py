@@ -57,10 +57,6 @@ def main(dir, format, scale, depth, skip_canvas, no_fills, optimize, max_mb_hash
     global BOTTOM_POSITION
     BOTTOM_POSITION = concurrency * 2 + 5
 
-    if optimize:
-        # TODO: optimize the hased image size to max {max_mb_hash}mb (resize it automatically) - it is not requierd to retain its original size
-        raise NotImplementedError("Optimization is not implemented yet.")
-
     # figma token
     if figma_token.startswith("[") and figma_token.endswith("]"):
       figma_tokens = json.loads(figma_token)
