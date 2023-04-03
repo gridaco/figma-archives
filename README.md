@@ -1,6 +1,60 @@
-# figma-scraper
+# Public Figma Community Files Archive
 
 Figma Files Scraper for Research &amp; Studies
+
+> As of Apr 2023, This Archive contains 100GB (Minified, raw - 550GB) of Figma Files, and 1.5TB of Top-level Images corresponding to Fimga layers and used image fills, and 3TB of all images (including layers) in the files.
+
+## Demo
+
+![figma-scraper demo](./docs/demo.gif)
+
+_Demo of step 2 ~ 4 running concurrently_
+
+## Usage
+
+This scraper is a combination of
+
+1. Selenium scraper to crawl the Figma community files (Takes about 5 hours) - **You can skip this step and use our [latest data](./data/latest)**
+2. Selenium automator to copy (duplicate) the file to your account (Takes about 3 days)
+3. Figma File Archiver to download the File content as JSON (Takes about 5 hours)
+4. And optionally, Figma Image Archiver to download the in-design images and layer baked as PNGs to your local machine (Takes about 6 days for top-frame layers, and about 1 month for all layers)
+
+```bash
+pip3 install -r requirements.txt
+
+# step 1. (Skip and use pre-crawled data if you want as mentioned above)
+cd figma_archiver
+scrapy crawl figma_spider --nolog -a target=popular
+# this will output a output.popular.json file
+
+
+# step 2. You'll need a new figma account since it copies about 30,00+ files to your drafts
+# setup .env following the README at figma_copy
+cd figma_copy
+python3 main.py --file='../data/latest/index.json' --batch-size=10000
+# this will output a community : your-file mapping under prgress/your-email@example.com.copies.json
+
+# step 3. you can run this script with figma_copy in parallel
+cd figma_archiver
+
+# fetch files
+python3 files.py -f ../figma_copy/progress/your-email@example.com.copies.json
+
+# fetch images (this use the output directory from above step)
+python3 images.py --src='./downloads/*.json'
+```
+
+This is a brief example of how-to-use, for full-setup, please read the README on each automators. and the script argument may differ by your configurations, and as you use extarnal drive.
+
+**Requirements**
+
+- About 1TB of free space on your local machine. (Minimal, for full scraping, without images)
+- About 100TB of free space on your external drive. (If you are collecting images as well. Full setup)
+
+**Todo**
+
+- Docker image for easy deployment and running on the cloud
+- Official CDN Server will latest data
 
 ## Disclaimer
 

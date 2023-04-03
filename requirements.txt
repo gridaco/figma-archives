@@ -1,4 +1,13 @@
 selenium
 scrapy
 webdriver-manager
+click
 tqdm
+requests
+requests-cache
+backoff
+urllib3
+jsonlines
+colorama
+ijson
+Pillow
