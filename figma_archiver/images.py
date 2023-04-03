@@ -52,8 +52,9 @@ BOTTOM_POSITION = 24
 @click.option("-src", '--source-dir', default="./downloads/*.json", help="Path to the JSON file")
 @click.option("-c", "--concurrency", help="Number of concurrent processes.", default=cpu_count(), type=int)
 @click.option("--skip", help="Number of files to skip (for dubugging).", default=0, type=int)
+@click.option("--no-download", is_flag=True, help="No downloading the images (This can be used if you want this script to only run for optimizing existing images)", default=0, type=int)
 @click.option("--shuffle", is_flag=True, help="Rather if to randomize the input for even distribution", default=False, type=click.BOOL)
-def main(version, dir, format, scale, depth, skip_canvas, no_fills, optimize, max_mb_hash, figma_token, source_dir, concurrency, skip, shuffle):
+def main(version, dir, format, scale, depth, skip_canvas, no_fills, optimize, max_mb_hash, figma_token, source_dir, concurrency, skip, no_download, shuffle):
     # progress bar position config
     global BOTTOM_POSITION
     BOTTOM_POSITION = concurrency * 2 + 5
@@ -113,6 +114,7 @@ def main(version, dir, format, scale, depth, skip_canvas, no_fills, optimize, ma
         'size': size_avg,
         'index': _,
         'pbar': pbar,
+        'no_download': no_download,
         'concurrency': concurrency
       })
       t.start()
@@ -129,7 +131,7 @@ def main(version, dir, format, scale, depth, skip_canvas, no_fills, optimize, ma
     # finally wait for the download thread to finish
     download_thread.join()
 
-def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, skip_canvas: bool, no_fills: bool, figma_token: str, format: str, scale: int, optimize: bool, max_mb_hash: int, depth: int, index: int, size: int, pbar: tqdm, concurrency: int):
+def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, skip_canvas: bool, no_fills: bool, figma_token: str, format: str, scale: int, optimize: bool, max_mb_hash: int, depth: int, index: int, size: int, pbar: tqdm, concurrency: int, no_download: bool):
     # for key, json_file in files:
     for key, json_file in tqdm(files, desc=f"⚡️ {figma_token[:8]}", position=BOTTOM_POSITION-(index+4), leave=True, total=size):
         subdir: Path = root_dir / key
@@ -158,7 +160,7 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
 
             # TODO: this is not safe. the image fills still can be not complete if we terminate during the download
             # Fetch and save image fills (B)
-            if not any(not re.match(r"\d+:\d+", img) for img in existing_images):
+            if len(existing_images) == 0 and not no_download:
                 # tqdm.write("Fetching image fills...")
                 image_fills = fetch_file_images(key, token=figma_token)
                 url_and_path_pairs = [
@@ -171,8 +173,14 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                 # for pair in url_and_path_pairs:
                 #   img_queue.put(pair + (max_mb_hash,))
             else:
-                ...
                 # tqdm.write(f"{images_dir} - Image fills already fetched")
+                ...
+                if optimize:
+                    for image in existing_images:
+                        file = images_dir / image
+                        success, saved = optimize_image(file, max_mb=max_mb_hash)                
+                        if success:
+                            tqdm.write(f"☑ {fixstr(f'(existing) Saved {(saved / 1024 / 1024):.2f}MB')}... → {file}")
 
           # ----------------------------------------------------------------------
           # bakes
@@ -188,7 +196,7 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
               and f"{node_id}@{scale}x.{format}" not in existing_images
           ]
 
-          if node_ids_to_fetch:
+          if node_ids_to_fetch and not no_download:
               # tqdm.write(f"Fetching {len(node_ids_to_fetch)} of {len(node_ids)} layer images...")
               layer_images = fetch_node_images(
                   key, node_ids_to_fetch, scale, format, token=figma_token, position=BOTTOM_POSITION-((concurrency*2)+index), conncurrency=concurrency)
@@ -331,7 +339,7 @@ def fetch_and_save_images(url_and_path_pairs, max_mb=1, position=5, num_threads=
         for future in futures:
             url, downloaded_path = future.result()
             if downloaded_path:
-                tqdm.write(f"☑ {url} → {downloaded_path}")
+                tqdm.write(f"☑ {fixstr(url)} → {downloaded_path}")
                 if max_mb is not None and max_mb > 0:
                     optimize_image(downloaded_path, max_mb=max_mb)
             else:
@@ -348,33 +356,34 @@ def fixstr(str, n=64):
         return str + " " * (n - len(str))
 
 
+mb = 1024 * 1024
 def optimize_image(path, max_mb=1):
+    margin = 0.3
     try:
         startsize = os.path.getsize(path)
-        max_size = max_mb * 1024 * 1024
-        target_bytes = max_size
-        if startsize > max_size:
-            # Open the image
-            img = Image.open(path)
-            # Calculate the target number of bytes
-            # Get the current number of bytes
-            current_bytes = io.BytesIO()
-            img.save(current_bytes, format='PNG')
-            current_bytes = current_bytes.tell()
+        max_size = max_mb * mb
+        # Check if the image is already smaller than the target size
+        if startsize <= max_size:
+            return None, None
+        target_bytes = max_size - (margin * max_size)
+        # Open the image
+        img = Image.open(path)
+        # Calculate the current number of bytes
+        current_bytes = io.BytesIO()
+        img.save(current_bytes, format='PNG')
+        current_bytes = current_bytes.tell()
+        if current_bytes > max_size:
             # Calculate the scale factor
             scale_factor = math.sqrt(target_bytes / current_bytes)
             # Calculate the new size
             new_size = tuple(int(dim * scale_factor) for dim in img.size)
             # Resize the image
             img = img.resize(new_size, resample=Image.BICUBIC)
-            # Save the image
-            img.save(current_bytes, format='PNG')
-
-            endsize = os.path.getsize(path)
-            saved = startsize - endsize
-            return True, saved
-        else:
-          return None, None
+        # Save the image
+        img.save(path, format='PNG')
+        endsize = os.path.getsize(path)
+        saved = startsize - endsize
+        return True, saved
     except Exception as e:
         tqdm.write(f"☒ Error optimizing {path}: {e}")
         return False, 0
