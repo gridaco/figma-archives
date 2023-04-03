@@ -3,6 +3,11 @@ import os
 
 
 def extract_absolute_bounding_box(json_data):
+    """
+
+    Extracts the absolute bounding box of all top level frames in a Figma file.
+
+    """
     result = []
 
     if json_data['document']['type'] == "DOCUMENT":
@@ -15,6 +20,11 @@ def extract_absolute_bounding_box(json_data):
     return result
 
 def main():
+    """
+
+    This script will extract the absolute bounding box of all top level frames in a Figma file.
+
+    """
     # Use a relative path from the script's directory
     relative_path_folder = "../data/samples/figma-samples-5k.min"
 
