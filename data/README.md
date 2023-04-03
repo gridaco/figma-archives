@@ -1,19 +1,10 @@
 # Sample Data Directory
 
-- /latest
+- [`/latest`](./latest/)
   - index.json
   - info.txt
   - map.json
   - meta.json
-- /samples-5k
-  - index.json
-  - info.txt
-  - map.json
-  - meta.json
-  - samples.min.zip (without images)
-- /samples-500
-  - index.json
-  - info.txt
-  - map.json
-  - meta.json
-  - samples.zip (with images)
+- [`/samples`](./samples/)
+  - samples.5k.min.zip (5,000 files samples without images)
+  - samples.zip (100 samples with images)
