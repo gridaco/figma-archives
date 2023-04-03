@@ -8,6 +8,8 @@ import time
 import json
 import os
 import re
+import shutil
+import tempfile
 import requests
 from requests.adapters import HTTPAdapter
 from urllib.parse import urlencode
@@ -365,7 +367,7 @@ def optimize_image(path, max_mb=1):
         # Check if the image is already smaller than the target size
         if startsize <= max_size:
             return None, None
-        target_bytes = max_size - (margin * max_size)
+        target_bytes = max_size - (margin * mb)
         # Open the image
         img = Image.open(path)
         # Calculate the current number of bytes
@@ -379,8 +381,18 @@ def optimize_image(path, max_mb=1):
             new_size = tuple(int(dim * scale_factor) for dim in img.size)
             # Resize the image
             img = img.resize(new_size, resample=Image.BICUBIC)
-        # Save the image
-        img.save(path, format='PNG')
+        # Save the image to a temporary file
+        with tempfile.NamedTemporaryFile(mode='wb', suffix='.png', delete=False) as tmp:
+            img.save(tmp.name, format='PNG')
+            # Remove the original file before copying the temporary file
+
+            # double check if it actually got smaller
+            if os.path.getsize(tmp.name) > startsize:
+                return False, 0
+
+            # Remove the original file before moving the temporary file to the original filename
+            os.remove(path)
+            shutil.move(tmp.name, path)
         endsize = os.path.getsize(path)
         saved = startsize - endsize
         return True, saved
