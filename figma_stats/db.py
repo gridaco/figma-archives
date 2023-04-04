@@ -1,3 +1,4 @@
+import gc
 import json
 import random
 import sqlite3
@@ -240,6 +241,10 @@ def fileworker(queue: Queue, db: Queue, depth):
                         **processed,
                     }
                     db.put((record, 'PUT'))
+                    del processed
+                    del record
+            del root_nodes
+            gc.collect()
             with processed_files_lock:
                 processed_files += 1
         except Exception as e:
@@ -247,6 +252,7 @@ def fileworker(queue: Queue, db: Queue, depth):
             with processed_files_lock:
                 processed_files += 1
             continue
+        time.sleep(0.1)
 
 
 # Worker function for multithreading
