@@ -1,4 +1,5 @@
 import json
+import random
 import sqlite3
 import threading
 from threading import Lock
@@ -21,7 +22,7 @@ def create_connection(db_file):
     conn = sqlite3.connect(db_file)
     return conn
 
-def create_table(conn):
+def create_table(conn: sqlite3.Connection):
     cursor = conn.cursor()
     cursor.execute('''CREATE TABLE IF NOT EXISTS nodes (
         file_id TEXT,
@@ -277,10 +278,12 @@ def dbworker(queue: Queue, db: str):
 
 @click.command()
 @click.argument("samples", type=click.Path(exists=True), required=True)
-@click.option("--db", default="samples.db", help="Path to the SQLite database file")
+@click.option("--db", type=click.Path(file_okay=True, dir_okay=False), default="samples.db", help="Path to the SQLite database file")
 @click.option("-c", "--concurrency", default=4, help="Number of threads to utilize")
 @click.option("--depth", default=0, help="Depth to process under each root node")
-def main(samples, db, concurrency, depth):
+@click.option("--max", default=None, help="Max n of samples to process. defaults to None, which means no limit.")
+@click.option("--shuffle", default=False, is_flag=True, help="Rather to shuffle order to process samples")
+def main(samples, db, concurrency, depth, max, shuffle):
     if concurrency < 1:
         raise ValueError("Concurrency must be greater than 0")
 
@@ -294,7 +297,10 @@ def main(samples, db, concurrency, depth):
     dbthread.start()
 
     # seed the file queue
-    for file_path in samples_path.glob("*/file.json"):
+    files = [f for f in samples_path.glob("*/file.json")]
+    if shuffle:
+        random.shuffle(files)
+    for file_path in files:
         file_id = file_path.parent.name
         file_queue.put((file_id, file_path))
 
@@ -313,7 +319,7 @@ def main(samples, db, concurrency, depth):
             threads.append(thread)
 
         # Update progress bar as files are processed
-        while processed_files < total_files:
+        while processed_files < total_files and (processed_files < max if max else True):
             progress_bar.update(processed_files - progress_bar.n)
             time.sleep(1)  # Add a small sleep to avoid busy-waiting
 
