@@ -231,7 +231,7 @@ def fileworker(queue: Queue, db: Queue, depth):
         
         try:
             root_nodes = roots_from_file(file_path)
-            tqdm.write(f'Processing {file_id} ({len(root_nodes)} items), {queue.qsize()} remaining')
+            tqdm.write(f'☐ {file_id} ({len(root_nodes)} items)')
             for node, canvas in root_nodes:
                 for processed in process_node(node=node, canvas=canvas, parent=None, depth=depth):
                     record = {
@@ -257,7 +257,7 @@ def dbworker(queue: Queue, db: str):
     create_table(conn)
 
     timeout = 60  # if there is no more items in the queue for 60 seconds after the last successful pop, exit.
-    progress = tqdm(total=0, position=PBARPOS - 1, desc='DB Worker', leave=True)
+    progress = tqdm(total=0, position=PBARPOS - 1, desc='📀', leave=True)
     while True:
         try:
             progress.total = progress.n + queue.qsize()
@@ -302,7 +302,7 @@ def main(samples, db, concurrency, depth):
 
     # Progress bar using tqdm
     total_files = file_queue.qsize()
-    progress_bar = tqdm(total=total_files, desc="Processing files", position=PBARPOS, leave=True)
+    progress_bar = tqdm(total=total_files, desc="📂", position=PBARPOS, leave=True)
 
     # Process files using multiple threads
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
