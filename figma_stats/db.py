@@ -300,9 +300,13 @@ def main(samples, db, concurrency, depth, max, shuffle):
     files = [f for f in samples_path.glob("*/file.json")]
     if shuffle:
         random.shuffle(files)
+    n = 0
     for file_path in files:
+        if max and n >= max:
+            break
         file_id = file_path.parent.name
         file_queue.put((file_id, file_path))
+        n += 1
 
     tqdm.write(f'Found {file_queue.qsize()} samples to process')
 
@@ -319,7 +323,7 @@ def main(samples, db, concurrency, depth, max, shuffle):
             threads.append(thread)
 
         # Update progress bar as files are processed
-        while processed_files < total_files and (processed_files < max if max else True):
+        while processed_files < total_files:
             progress_bar.update(processed_files - progress_bar.n)
             time.sleep(1)  # Add a small sleep to avoid busy-waiting
 
