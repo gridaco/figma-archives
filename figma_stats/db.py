@@ -222,12 +222,11 @@ def process_node(node, depth, canvas, parent=None, current_depth=0):
         raise e
 
 
-dbthreshold = 20000 # if db's qsize is bigger than this, wait the file processing for the db thread to catch up.
 
-def fileworker(queue: Queue, db: Queue, depth, clean=False):
+def fileworker(queue: Queue, db: Queue, depth, threshold=4096, clean=False):
     global processed_files
     while True:
-        while db.qsize() > dbthreshold:
+        while db.qsize() > threshold:
             time.sleep(1)
         try:
             file_id, file_path = queue.get_nowait()
@@ -237,12 +236,14 @@ def fileworker(queue: Queue, db: Queue, depth, clean=False):
         
         try:
             root_nodes = roots_from_file(file_path)
-            tqdm.write(f'☐ {file_id} ({len(root_nodes)} items)')
+            # tqdm.write(f'☐ {file_id} ({len(root_nodes)} items)')
             for node, canvas in root_nodes:
                 for processed in process_node(node=node, canvas=canvas, parent=None, depth=depth):
                     record = {
                         'file_id': file_id,
                         **processed,
+                        # dump here, so fileworker thread, so db thraed won't be overloaded.
+                        'data': json.dumps(processed['data']),
                     }
                     db.put((record, 'PUT'))
                     del processed
@@ -279,6 +280,7 @@ def dbworker(queue: Queue, db: str):
                 break
             if command == 'PUT':
                 insert_node(conn, **payload)
+                tqdm.write(f'☑ {payload["file_id"]}/{payload["node_id"]}')
         except Empty:
             # Exit the loop if the queue is empty for the specified timeout duration
             break
@@ -296,6 +298,8 @@ def dbworker(queue: Queue, db: str):
 @click.option("--shuffle", default=False, is_flag=True, help="Rather to shuffle order to process samples")
 @click.option("--gc", default=False, is_flag=True, help="Rather to use GC after each process")
 def main(samples, db, concurrency, depth, max, shuffle, gc):
+    dbthreshold = 4096 * concurrency # if db's qsize is bigger than this, wait the file processing for the db thread to catch up.
+    
     if concurrency < 1:
         raise ValueError("Concurrency must be greater than 0")
 
@@ -331,7 +335,7 @@ def main(samples, db, concurrency, depth, max, shuffle, gc):
         threads = []
         for _ in range(concurrency):
             # position = PBARPOS - (3 + _)
-            thread = executor.submit(fileworker, file_queue, db_queue, depth, gc)
+            thread = executor.submit(fileworker, file_queue, db_queue, depth, dbthreshold, gc)
             threads.append(thread)
 
         # Update progress bar as files are processed
