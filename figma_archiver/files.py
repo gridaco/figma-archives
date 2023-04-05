@@ -4,6 +4,7 @@ import re
 import json
 import sys
 import time
+import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 import click
@@ -37,17 +38,29 @@ def is_valid_json_file(file: Path):
 
 
 def save_file_locally(args):
-    file_key, figma_token, output_path, validate, minify = args
-    headers = {
-        "X-Figma-Token": figma_token
-    }
+    file_key, figma_token, output_path, validate, replace, replace_before, minify = args
+    file_path = Path(output_path / f"{file_key}.json")
+
+
+    if replace_before:
+        # check the last modified date of the file
+        if file_path.exists():
+            file_mtime = time.ctime(os.path.getmtime(file_path))
+            file_datetime = datetime.datetime.fromtimestamp(file_mtime)
+            if replace_before and file_datetime < replace_before:
+                file_path.unlink(missing_ok=True)
+            ...
 
     if validate:
         # check if file exists in output_path, validate it, if valid, return
-        if is_valid_json_file(output_path / f"{file_key}.json"):
+        if is_valid_json_file(file_path):
            return True
 
     try:
+        headers = {
+            "X-Figma-Token": figma_token
+        }
+        
         response = requests.get(
             f"{FIGMA_API_BASE_URL}/{file_key}", params={
                 "geometry": "paths"
@@ -55,7 +68,8 @@ def save_file_locally(args):
 
         if response.status_code == 200:
             json_data = response.json()
-            file_path = output_path / f"{file_key}.json"
+            if replace:
+                file_path.unlink(missing_ok=True)
             with open(file_path, "w") as file:
                 if minify:
                     json.dump(json_data, file, separators=(',', ':'))
@@ -82,11 +96,12 @@ def save_file_locally(args):
 @click.option("-o", "--output-dir", help="Output directory to save the JSON files.", default="downloads", type=click.Path(file_okay=False))
 @click.option("-c", "--concurrency", help="Number of concurrent processes.", default=cpu_count(), type=int)
 @click.option('--replace', is_flag=True, help="Rather to replace the existing json file.", default=False, type=click.BOOL)
+@click.option('--replace-before', required=False, help="Only replace (re-download) the file created before the date", type=click.DateTime())
 @click.option('--validate', is_flag=True, help="Rather to validate the json response (downloading and already archived ones).", default=False, type=click.BOOL)
 @click.option('--shuffle', is_flag=True, help="Shuffle orders.", default=False, type=click.BOOL)
 @click.option('--minify', is_flag=True, help="Minify the json response with no indents, one line.", default=True, type=click.BOOL)
-def main(map_file, figma_token, output_dir, concurrency, replace, validate, shuffle, minify):
-    if replace:
+def main(map_file, figma_token, output_dir, concurrency, replace, replace_before, validate, shuffle, minify):
+    if replace_before:
        raise NotImplementedError()
 
     if not figma_token:
@@ -113,7 +128,7 @@ def main(map_file, figma_token, output_dir, concurrency, replace, validate, shuf
 
     existing_files = set([p.stem for p in output_path.glob("*.json")])
 
-    if validate:
+    if validate or replace:
       file_keys_to_download = file_keys
     else:
       file_keys_to_download = [
@@ -126,7 +141,7 @@ def main(map_file, figma_token, output_dir, concurrency, replace, validate, shuf
         f'archiving {len(file_keys_to_download)} files with {concurrency} threads')
     try:
         with Pool(concurrency) as pool:
-            results = list(tqdm(pool.imap_unordered(save_file_locally, [(file_key, figma_token, output_path, validate, minify) for file_key in file_keys_to_download]), total=len(
+            results = list(tqdm(pool.imap_unordered(save_file_locally, [(file_key, figma_token, output_path, validate, replace, replace_before, minify) for file_key in file_keys_to_download]), total=len(
                 file_keys_to_download), desc="☁️", leave=True, position=4))
     except KeyboardInterrupt:
         tqdm.write("\nInterrupted by user. Terminating...")
