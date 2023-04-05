@@ -18,7 +18,7 @@ PBARPOS = 8
 @click.argument("src", type=click.Path(exists=True), required=True)
 @click.option("--db", type=click.Path(file_okay=True, dir_okay=False), default="samples.db", help="Path to the SQLite database file")
 @click.option("-c", "--concurrency", default=4, help="Number of threads to utilize")
-@click.option("--depth", default=None, help="Depth to process under each root node (defaults to None, which means no limit)")
+@click.option("--depth", default=None, type=click.INT, help="Depth to process under each root node (defaults to None, which means no limit)")
 @click.option("--max", default=None, type=click.INT, help="Max n of samples to process. defaults to None, which means no limit.")
 @click.option("--shuffle", default=False, is_flag=True, help="Rather to shuffle order to process samples")
 @click.option("--gc", default=False, is_flag=True, help="Rather to use GC after each process")
