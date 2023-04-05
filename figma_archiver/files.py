@@ -1,4 +1,5 @@
 import os
+import random
 import re
 import json
 import sys
@@ -82,8 +83,9 @@ def save_file_locally(args):
 @click.option("-c", "--concurrency", help="Number of concurrent processes.", default=cpu_count(), type=int)
 @click.option('--replace', is_flag=True, help="Rather to replace the existing json file.", default=False, type=click.BOOL)
 @click.option('--validate', is_flag=True, help="Rather to validate the json response (downloading and already archived ones).", default=False, type=click.BOOL)
+@click.option('--shuffle', is_flag=True, help="Shuffle orders.", default=False, type=click.BOOL)
 @click.option('--minify', is_flag=True, help="Minify the json response with no indents, one line.", default=True, type=click.BOOL)
-def main(map_file, figma_token, output_dir, concurrency, replace, validate, minify):
+def main(map_file, figma_token, output_dir, concurrency, replace, validate, shuffle, minify):
     if replace:
        raise NotImplementedError()
 
@@ -116,13 +118,16 @@ def main(map_file, figma_token, output_dir, concurrency, replace, validate, mini
     else:
       file_keys_to_download = [
           file_key for file_key in file_keys if file_key not in existing_files]
+    
+    if shuffle:
+      random.shuffle(file_keys_to_download)
 
     tqdm.write(
         f'archiving {len(file_keys_to_download)} files with {concurrency} threads')
     try:
         with Pool(concurrency) as pool:
             results = list(tqdm(pool.imap_unordered(save_file_locally, [(file_key, figma_token, output_path, validate, minify) for file_key in file_keys_to_download]), total=len(
-                file_keys_to_download), desc="Downloading Figma files", leave=True, position=4))
+                file_keys_to_download), desc="☁️", leave=True, position=4))
     except KeyboardInterrupt:
         tqdm.write("\nInterrupted by user. Terminating...")
         pool.terminate()
