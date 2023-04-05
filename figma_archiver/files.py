@@ -54,11 +54,12 @@ def save_file_locally(args):
 
         if response.status_code == 200:
             json_data = response.json()
-            with open(output_path / f"{file_key}.json", "w") as output_file:
+            file_path = output_path / f"{file_key}.json"
+            with open(file_path, "w") as file:
                 if minify:
-                    json.dump(json_data, output_file, separators=(',', ':'))
+                    json.dump(json_data, file, separators=(',', ':'))
                 else:
-                    json.dump(json_data, output_file, indent=4)
+                    json.dump(json_data, file, indent=4)
         elif response.status_code == 429:
             retry_after = int(response.headers.get("Retry-After", 60))
             time.sleep(retry_after)
@@ -121,7 +122,7 @@ def main(map_file, figma_token, output_dir, concurrency, replace, validate, mini
     try:
         with Pool(concurrency) as pool:
             results = list(tqdm(pool.imap_unordered(save_file_locally, [(file_key, figma_token, output_path, validate, minify) for file_key in file_keys_to_download]), total=len(
-                file_keys_to_download), desc="Downloading Figma files"))
+                file_keys_to_download), desc="Downloading Figma files", leave=True, position=10))
     except KeyboardInterrupt:
         tqdm.write("\nInterrupted by user. Terminating...")
         pool.terminate()
