@@ -296,20 +296,21 @@ def dbworker(queue: Queue, db: str):
 
 
 @click.command()
-@click.argument("samples", type=click.Path(exists=True), required=True)
+@click.argument("src", type=click.Path(exists=True), required=True)
+# @click.option("--src-type", type=click.STRING, default="samples", help="type of src - samples / db (db option is used when you want to process deeper in second entry, when first entry is processed with samples)")
 @click.option("--db", type=click.Path(file_okay=True, dir_okay=False), default="samples.db", help="Path to the SQLite database file")
 @click.option("-c", "--concurrency", default=4, help="Number of threads to utilize")
 @click.option("--depth", default=0, help="Depth to process under each root node")
 @click.option("--max", default=None, type=click.INT, help="Max n of samples to process. defaults to None, which means no limit.")
 @click.option("--shuffle", default=False, is_flag=True, help="Rather to shuffle order to process samples")
 @click.option("--gc", default=False, is_flag=True, help="Rather to use GC after each process")
-def main(samples, db, concurrency, depth, max, shuffle, gc):
+def main(src, db, concurrency, depth, max, shuffle, gc):
     dbthreshold = 4096 * concurrency # if db's qsize is bigger than this, wait the file processing for the db thread to catch up.
     
     if concurrency < 1:
         raise ValueError("Concurrency must be greater than 0")
 
-    samples_path = Path(samples)
+    samples_path = Path(src)
 
     # Create a queue and populate it with file IDs and their respective paths
     file_queue = Queue()
