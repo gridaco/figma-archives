@@ -1,13 +1,5 @@
 ### Stats
 
-## `db.py`
-
-Collects node info into a single sqlite db for faster analysis.
-
-```bash
-python3 db.py ./path-to-samples-dir
-```
-
 ## Analysis
 
 This prints out the status of overall scraping, and the brief stats of the crawled data, including..
