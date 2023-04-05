@@ -122,7 +122,7 @@ def main(map_file, figma_token, output_dir, concurrency, replace, validate, mini
     try:
         with Pool(concurrency) as pool:
             results = list(tqdm(pool.imap_unordered(save_file_locally, [(file_key, figma_token, output_path, validate, minify) for file_key in file_keys_to_download]), total=len(
-                file_keys_to_download), desc="Downloading Figma files", leave=True, position=10))
+                file_keys_to_download), desc="Downloading Figma files", leave=True, position=4))
     except KeyboardInterrupt:
         tqdm.write("\nInterrupted by user. Terminating...")
         pool.terminate()
