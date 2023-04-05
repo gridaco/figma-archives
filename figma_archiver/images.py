@@ -50,16 +50,22 @@ BOTTOM_POSITION = 24
 @click.option('--no-fills',  default=False, help="Skips the download for Image fills")
 @click.option("--optimize", is_flag=True, help="Optimize images size (Now only applied to hash images)", default=False, type=click.BOOL)
 @click.option("--max-mb-hash", help="Max mb to be applied to has images (if optimize is true)", default=1, type=click.INT)
+@click.option('--only-thumbnails', is_flag=True, default=False, help="process only thumbnails. this is usefull when thumbnail is expired & files are fresh-fetched")
 @click.option("-t", "--figma-token", help="Figma API access token.", default=os.getenv("FIGMA_ACCESS_TOKEN"), type=str)
 @click.option("-src", '--source-dir', default="./downloads/*.json", help="Path to the JSON file")
 @click.option("-c", "--concurrency", help="Number of concurrent processes.", default=cpu_count(), type=int)
-@click.option("--skip", help="Number of files to skip (for dubugging).", default=0, type=int)
+@click.option("--skip-n", help="Number of files to skip (for dubugging).", default=0, type=int)
 @click.option("--no-download", is_flag=True, help="No downloading the images (This can be used if you want this script to only run for optimizing existing images)", default=0, type=int)
 @click.option("--shuffle", is_flag=True, help="Rather if to randomize the input for even distribution", default=False, type=click.BOOL)
-def main(version, dir, format, scale, depth, skip_canvas, no_fills, optimize, max_mb_hash, figma_token, source_dir, concurrency, skip, no_download, shuffle):
+def main(version, dir, format, scale, depth, skip_canvas, no_fills, optimize, max_mb_hash, only_thumbnails, figma_token, source_dir, concurrency, skip_n, no_download, shuffle):
     # progress bar position config
     global BOTTOM_POSITION
     BOTTOM_POSITION = concurrency * 2 + 5
+
+    if only_thumbnails:
+        tqdm.write('Thumbnails only option passed. Ignoring other fills or bakes related options.')
+        no_fills = True # skip image fills
+        depth = 0 # skip bakes
 
     # figma token
     if figma_token.startswith("[") and figma_token.endswith("]"):
@@ -76,7 +82,7 @@ def main(version, dir, format, scale, depth, skip_canvas, no_fills, optimize, ma
     _src_dir = Path('/'.join(source_dir.split("/")[0:-1]))   # e.g. ./downloads
     _src_file_pattern = source_dir.split("/")[-1]            # e.g. *.json
     json_files = glob.glob(_src_file_pattern, root_dir=_src_dir)
-    json_files = json_files[skip:]
+    json_files = json_files[skip_n:]
     file_keys = [Path(file).stem for file in json_files]
 
     # randomize for even distribution
