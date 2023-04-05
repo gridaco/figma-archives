@@ -75,13 +75,14 @@ def save_file_locally(args):
 
 
 @click.command()
-@click.option("-f", "--figma-file-id", help="Path to the JSON file containing Figma file IDs.", required=True, type=click.Path(exists=True, dir_okay=False))
+@click.option("-f", "--map-file", help="Path to the JSON file containing Figma file key map. (map.json)", default='../data/latest/map.json', type=click.Path(exists=True, dir_okay=False))
 @click.option("-t", "--figma-token", help="Figma API access token.", default=os.getenv("FIGMA_ACCESS_TOKEN"), type=str)
 @click.option("-o", "--output-dir", help="Output directory to save the JSON files.", default="downloads", type=click.Path(file_okay=False))
 @click.option("-c", "--concurrency", help="Number of concurrent processes.", default=cpu_count(), type=int)
+@click.option('--replace', is_flag=True, help="Rather to replace the existing json file.", default=False, type=click.BOOL)
 @click.option('--validate', is_flag=True, help="Rather to validate the json response (downloading and already archived ones).", default=False, type=click.BOOL)
 @click.option('--minify', is_flag=True, help="Minify the json response with no indents, one line.", default=True, type=click.BOOL)
-def main(figma_file_id, figma_token, output_dir, concurrency, validate, minify):
+def main(map_file, figma_token, output_dir, concurrency, replace, validate, minify):
     if not figma_token:
         print(
             "Please set the FIGMA_ACCESS_TOKEN environment variable or provide it with the -t option.")
@@ -94,7 +95,7 @@ def main(figma_file_id, figma_token, output_dir, concurrency, validate, minify):
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    with open(figma_file_id, "r") as f:
+    with open(map_file, "r") as f:
         input_data = json.load(f)
 
     file_links = [value for key, value in input_data.items()
@@ -113,7 +114,7 @@ def main(figma_file_id, figma_token, output_dir, concurrency, validate, minify):
           file_key for file_key in file_keys if file_key not in existing_files]
 
     tqdm.write(
-        f'archiving {len(file_keys_to_download)} files with {concurrency} processes')
+        f'archiving {len(file_keys_to_download)} files with {concurrency} threads')
     try:
         with Pool(concurrency) as pool:
             results = list(tqdm(pool.imap_unordered(save_file_locally, [(file_key, figma_token, output_path, validate, minify) for file_key in file_keys_to_download]), total=len(

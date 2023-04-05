@@ -7,10 +7,14 @@ Donwload once, with full data, so we can use it offline and won't need to access
 ## Usage
 
 ```bash
-python3 files.py -f <list_file> -t <figma_token> -o <output_dir>
+python3 files.py -f <mapfile> -t <figma_token> -o <output_dir>
 
 # examples
-python3 files.py -f ../figma_copy/progress/figma@grida.co.copies.json
+python3 files.py -f ../figma_copy/progress/your@figma-account.com.copies.json
+
+# replacing
+python3 files.py -f ../path/to/map.json --replace
+
 
 # fetching only images (after fetching files)
 python3 images.py --src='./downloads/*.json'
