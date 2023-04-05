@@ -1,8 +1,6 @@
 
 import json
-from tqdm import tqdm
 from .utils import getfrom
-
 
 def roots_from_file(file_path):
     with open(file_path, "r") as f:
@@ -36,16 +34,29 @@ def process_node(node, depth, canvas, parent=None, current_depth=0):
       # geometry
       record = {
           **record,
-          'x': rel(node, parent, 'x'),
           'x_abs': getfrom(node, "absoluteBoundingBox", "x", default=0),
-          'y': rel(node, parent, 'y'),
           'y_abs': getfrom(node, "absoluteBoundingBox", "y", default=0),
-          # if geometry=paths is not set while archiving, the "size" parameter can be empty. (we an use 'or' cuz, if, 0, the second one will also be 0.)
-          'width': getfrom(node, "size", "x") or getfrom(node, "absoluteBoundingBox", "width"),
-          'height': getfrom(node, "size", "y") or getfrom(node, "absoluteBoundingBox", "height"),
-          # 
           'rotation': getfrom(node, 'rotation', default=0),
       }
+      if 'relativeTransform' in node:
+          # size and relativeTransform is only present if geometry=paths is passed
+          record = {
+            **record,
+            # https://github.com/gridaco/design-sdk/blob/main/figma-remote/lib/blenders/general.blend.ts
+            'x': getfrom(node, "relativeTransform", 0, 2, default=0) if parent else 0,
+            'y': getfrom(node, "relativeTransform", 1, 2, default=0) if parent else 0,
+            'width': getfrom(node, "size", "x"),
+            'height': getfrom(node, "size", "y"),
+            # 
+          }
+      else:
+          record = {
+              **record,
+              'x': absrel(node, parent, 'x') if parent else 0,
+              'y': absrel(node, parent, 'y') if parent else 0,
+              'width': getfrom(node, "absoluteBoundingBox", "width"),
+              'height': getfrom(node, "absoluteBoundingBox", "height"),
+          }
 
       # general
       record = {
@@ -75,7 +86,7 @@ def process_node(node, depth, canvas, parent=None, current_depth=0):
           # 'padding_left': ,
           # 'padding_right': ,
           # 'padding_bottom': ,        
-      }    
+      }
 
       if type == "TEXT":
           _style = node.get('style')
@@ -102,14 +113,20 @@ def process_node(node, depth, canvas, parent=None, current_depth=0):
           else:
               record['data'] = node
 
+      # finally, safely remove all keys from record, from record['data'] to reduce the size of the record.
+      for k in [key for key in record.keys()]:
+          if k in record['data']:
+              try: del record['data'][k] 
+              except: ...
+
       yield record
     except Exception as e:
         raise KeyError(f'{node["id"]}: {e}')
 
 
-def rel(a, b, k):
+def absrel(a, b, k):
     try:
-      return (getfrom(a, "absoluteBoundingBox", k, default=0) - getfrom(b, "absoluteBoundingBox", k, default=0)) if parent else 0
+      return (getfrom(a, "absoluteBoundingBox", k, default=0) - getfrom(b, "absoluteBoundingBox", k, default=0))
     except:
       # the x, y, width, height can be null for BOOLEAN_OPERATION and other nodes.
       return None
