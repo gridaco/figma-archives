@@ -14,8 +14,8 @@ from colorama import Fore, Back, Style
 @click.option('--map', required=False, type=click.Path(exists=True), help='Path to map file (JSON)')
 @click.option('--meta', required=False, type=click.Path(exists=True), help='Path to meta file (JSON)')
 @click.option('--output', required=True, type=click.Path(), help='Path to output directory')
-@click.option('--dir-files-archive', required=True, type=str, help='Path to files archive directory')
-@click.option('--dir-images-archive', required=True, type=str, help='Path to images archive directory')
+@click.option('--dir-files-archive', required=True, type=click.Path(exists=True, file_okay=False), help='Path to files archive directory')
+@click.option('--dir-images-archive', required=False, type=click.Path(exists=True, file_okay=False), help='Path to images archive directory')
 @click.option('--sample', default=None, type=int, help='Number of samples to process')
 @click.option('--sample-all', is_flag=False, help='Process all available data')
 @click.option('--ensure-images', is_flag=True, default=False, help='Ensure images exists for files')
@@ -55,6 +55,10 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
 
     dir_files_archive = Path(dir_files_archive)
     dir_images_archive = Path(dir_images_archive)
+
+    if not skip_images and not dir_images_archive.exists():
+        raise click.UsageError(
+            'Images archive directory does not exist')
 
     # create root output dir
     output = Path(output)
