@@ -71,10 +71,10 @@ def save_file_locally(args):
             if replace:
                 file_path.unlink(missing_ok=True)
             with open(file_path, "w") as file:
-                if minify:
-                    json.dump(json_data, file, separators=(',', ':'))
-                else:
+                if not minify:
                     json.dump(json_data, file, indent=4)
+                else:
+                    json.dump(json_data, file, separators=(',', ':'))
         elif response.status_code == 429:
             retry_after = int(response.headers.get("Retry-After", 60))
             time.sleep(retry_after)
@@ -99,7 +99,7 @@ def save_file_locally(args):
 @click.option('--replace-before', required=False, help="Only replace (re-download) the file created before the date", type=click.DateTime())
 @click.option('--validate', is_flag=True, help="Rather to validate the json response (downloading and already archived ones).", default=False, type=click.BOOL)
 @click.option('--shuffle', is_flag=True, help="Shuffle orders.", default=False, type=click.BOOL)
-@click.option('--minify', is_flag=True, help="Minify the json response with no indents, one line.", default=True, type=click.BOOL)
+@click.option('--minify', is_flag=True, help="Minify the json response with no indents, one line.", default=False, type=click.BOOL)
 def main(map_file, figma_token, output_dir, concurrency, replace, replace_before, validate, shuffle, minify):
     if replace_before:
        raise NotImplementedError()
@@ -138,7 +138,7 @@ def main(map_file, figma_token, output_dir, concurrency, replace, replace_before
       random.shuffle(file_keys_to_download)
 
     tqdm.write(
-        f'archiving {len(file_keys_to_download)} files with {concurrency} threads')
+        f'archiving {len(file_keys_to_download)} files with {concurrency} threads with minify `{minify}` option.')
     try:
         with Pool(concurrency) as pool:
             results = list(tqdm(pool.imap_unordered(save_file_locally, [(file_key, figma_token, output_path, validate, replace, replace_before, minify) for file_key in file_keys_to_download]), total=len(
