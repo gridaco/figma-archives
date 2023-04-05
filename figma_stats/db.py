@@ -12,7 +12,7 @@ import time
 import click
 from tqdm import tqdm
 
-PBARPOS = 16
+PBARPOS = 8
 
 processed_files = 0
 processed_files_lock = Lock()
@@ -222,9 +222,13 @@ def process_node(node, depth, canvas, parent=None, current_depth=0):
         raise e
 
 
-def fileworker(queue: Queue, db: Queue, depth):
+dbthreshold = 20000 # if db's qsize is bigger than this, wait the file processing for the db thread to catch up.
+
+def fileworker(queue: Queue, db: Queue, depth, clean=False):
     global processed_files
     while True:
+        while db.qsize() > dbthreshold:
+            time.sleep(1)
         try:
             file_id, file_path = queue.get_nowait()
         except Empty:
@@ -244,7 +248,8 @@ def fileworker(queue: Queue, db: Queue, depth):
                     del processed
                     del record
             del root_nodes
-            gc.collect()
+            if clean:
+              gc.collect()
             with processed_files_lock:
                 processed_files += 1
         except Exception as e:
@@ -289,7 +294,8 @@ def dbworker(queue: Queue, db: str):
 @click.option("--depth", default=0, help="Depth to process under each root node")
 @click.option("--max", default=None, type=click.INT, help="Max n of samples to process. defaults to None, which means no limit.")
 @click.option("--shuffle", default=False, is_flag=True, help="Rather to shuffle order to process samples")
-def main(samples, db, concurrency, depth, max, shuffle):
+@click.option("--gc", default=False, is_flag=True, help="Rather to use GC after each process")
+def main(samples, db, concurrency, depth, max, shuffle, gc):
     if concurrency < 1:
         raise ValueError("Concurrency must be greater than 0")
 
@@ -325,13 +331,14 @@ def main(samples, db, concurrency, depth, max, shuffle):
         threads = []
         for _ in range(concurrency):
             # position = PBARPOS - (3 + _)
-            thread = executor.submit(fileworker, file_queue, db_queue, depth)
+            thread = executor.submit(fileworker, file_queue, db_queue, depth, gc)
             threads.append(thread)
 
         # Update progress bar as files are processed
         while processed_files < total_files:
             progress_bar.update(processed_files - progress_bar.n)
             time.sleep(1)  # Add a small sleep to avoid busy-waiting
+        progress_bar.update(processed_files - progress_bar.n)
 
     # send the sentinel value to the db_queue
     db_queue.put((None, None))
