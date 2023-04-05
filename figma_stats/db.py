@@ -185,11 +185,13 @@ def process_node(node, depth, canvas, parent=None, current_depth=0):
           'x_abs': getfrom(node, "absoluteBoundingBox", "x", default=0),
           'y': (getfrom(node, "absoluteBoundingBox", "y", default=0) - getfrom(parent, "absoluteBoundingBox", "y", default=0)) if parent else 0,
           'y_abs': getfrom(node, "absoluteBoundingBox", "y", default=0),
-          'width': getfrom(node, "absoluteBoundingBox", "width"),
-          'height': getfrom(node, "absoluteBoundingBox", "height"),
+          'width': getfrom(node, "size", "x"),
+          'height': getfrom(node, "size", "y"),
           'rotation': getfrom(node, 'rotation', 0),
           'opacity': node.get('opacity', 1),
           # 'color': node['fills'][0]['color'],
+          # fills
+          # strokes
           'canvas_id': canvas,
           'border_width': node.get('strokeWeight', 0),
           # 'border_color': ,
