@@ -113,7 +113,7 @@ def insert_node(
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (
         file_id, node_id, parent_id, _type, name, data, depth,
         px(x), px(x_abs), px(y), px(y_abs), px(width), px(height),
-        rotation, o(opacity), color, canvas_id, text,
+        deg(rotation), o(opacity), color, canvas_id, text,
         font_family, font_weight, font_size, text_align,
         px(border_width), border_color, px(border_radius),
         px(box_shadow_offset_x), px(box_shadow_offset_y), px(box_shadow_blur), px(box_shadow_spread),
@@ -132,7 +132,11 @@ def o(r):
     if r is None:
         return None
     return round(r, 4)
-    
+
+def deg(r):
+    if r is None:
+        return None
+    return round(r, 2)
 
 def roots_from_file(file_path):
     with open(file_path, "r") as f:
@@ -183,7 +187,7 @@ def process_node(node, depth, canvas, parent=None, current_depth=0):
           'y_abs': getfrom(node, "absoluteBoundingBox", "y", default=0),
           'width': getfrom(node, "absoluteBoundingBox", "width"),
           'height': getfrom(node, "absoluteBoundingBox", "height"),
-          # 'rotation': node['absoluteBoundingBox']['rotation'],
+          'rotation': getfrom(node, 'rotation', 0),
           'opacity': node.get('opacity', 1),
           # 'color': node['fills'][0]['color'],
           'canvas_id': canvas,
