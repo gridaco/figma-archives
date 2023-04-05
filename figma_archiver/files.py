@@ -45,11 +45,12 @@ def save_file_locally(args):
     if replace_before:
         # check the last modified date of the file
         if file_path.exists():
-            file_mtime = time.ctime(os.path.getmtime(file_path))
+            file_mtime = os.path.getmtime(file_path)  # getmtime returns a float
             file_datetime = datetime.datetime.fromtimestamp(file_mtime)
             if replace_before and file_datetime < replace_before:
                 file_path.unlink(missing_ok=True)
-            ...
+            else:
+                return True
 
     if validate:
         # check if file exists in output_path, validate it, if valid, return
@@ -101,9 +102,6 @@ def save_file_locally(args):
 @click.option('--shuffle', is_flag=True, help="Shuffle orders.", default=False, type=click.BOOL)
 @click.option('--minify', is_flag=True, help="Minify the json response with no indents, one line.", default=False, type=click.BOOL)
 def main(map_file, figma_token, output_dir, concurrency, replace, replace_before, validate, shuffle, minify):
-    if replace_before:
-       raise NotImplementedError()
-
     if not figma_token:
         print(
             "Please set the FIGMA_ACCESS_TOKEN environment variable or provide it with the -t option.")
