@@ -83,6 +83,9 @@ def save_file_locally(args):
 @click.option('--validate', is_flag=True, help="Rather to validate the json response (downloading and already archived ones).", default=False, type=click.BOOL)
 @click.option('--minify', is_flag=True, help="Minify the json response with no indents, one line.", default=True, type=click.BOOL)
 def main(map_file, figma_token, output_dir, concurrency, replace, validate, minify):
+    if replace:
+       raise NotImplementedError()
+
     if not figma_token:
         print(
             "Please set the FIGMA_ACCESS_TOKEN environment variable or provide it with the -t option.")
