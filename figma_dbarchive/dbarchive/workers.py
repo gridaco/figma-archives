@@ -62,11 +62,14 @@ def fileworker(queue: Queue, db: Queue, depth, threshold=4096, clean=False):
                         # dump here, so fileworker thread, so db thraed won't be overloaded.
                         'data': strfy(processed.get('data')),
                         'children': strfy(processed.get('children')),
+                        'background_color': strfy(processed.get('background_color')),
                         'fills': strfy(processed.get('fills')),
                         'effects': strfy(processed.get('effects')),
                         'constraints': strfy(processed.get('constraints')),
                         'strokes': strfy(processed.get('strokes')),
                         'export_settings': strfy(processed.get('export_settings')),
+                        'fill_geometry': strfy(processed.get('fill_geometry')),
+                        'stroke_geometry': strfy(processed.get('stroke_geometry')),
                     }
                     db.put((record, 'PUT'))
                     del processed

@@ -63,6 +63,7 @@ def main(mode, src, db, concurrency, depth, max, shuffle, gc):
     total_files = file_queue.qsize()
     progress_bar = tqdm(total=total_files, desc="📂", position=PBARPOS, leave=True)
 
+    # fileworker(file_queue, db_queue, depth, dbthreshold, gc)
     # Process files using multiple threads
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
         threads = []

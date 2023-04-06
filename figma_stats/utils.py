@@ -46,29 +46,3 @@ def flatten(lst):
         else:
             result.append(item)
     return result
-
-def blend_figma_fills_best_shot(fills):
-    """
-    blends the figma fills in the best way
-    """
-
-    ...
-
-
-def blend_colors_porter_duff(colors):
-    """
-    takes a list of rgba colors wher r, g, b, a is 0 to 1 (not 0 to 255)
-    """
-    def porter_duff_over(c1, c2):
-        a1, a2 = c1[3], c2[3]
-        a_out = a1 + a2 * (1 - a1)
-        
-        if a_out == 0:
-            return [0, 0, 0, 0]
-        
-        return [(c1[i] * a1 + c2[i] * a2 * (1 - a1)) / a_out for i in range(3)] + [a_out]
-
-    result = [0, 0, 0, 0]
-    for color in colors:
-        result = porter_duff_over(result, color)
-    return result
