@@ -13,7 +13,7 @@ def roots_from_file(file_path):
         return roots
 
 
-def process_node(node, depth, canvas, parent=None, current_depth=0):
+def process_node(node: dict, depth, canvas, parent=None, current_depth=0):
     """
     if depth is None, it means we want to process all nodes
     """
@@ -40,37 +40,36 @@ def process_node(node, depth, canvas, parent=None, current_depth=0):
       }
       if 'relativeTransform' in node:
           # size and relativeTransform is only present if geometry=paths is passed
-          record = {
-            **record,
-            # https://github.com/gridaco/design-sdk/blob/main/figma-remote/lib/blenders/general.blend.ts
-            'x': getfrom(node, "relativeTransform", 0, 2, default=0) if parent else 0,
-            'y': getfrom(node, "relativeTransform", 1, 2, default=0) if parent else 0,
-            'width': getfrom(node, "size", "x"),
-            'height': getfrom(node, "size", "y"),
-            # 
-          }
+          # https://github.com/gridaco/design-sdk/blob/main/figma-remote/lib/blenders/general.blend.ts
+          x = getfrom(node, "relativeTransform", 0, 2, default=0) if parent else 0
+          y = getfrom(node, "relativeTransform", 1, 2, default=0) if parent else 0
+          width = getfrom(node, "size", "x")
+          height = getfrom(node, "size", "y")
       else:
-          record = {
-              **record,
-              'x': absrel(node, parent, 'x') if parent else 0,
-              'y': absrel(node, parent, 'y') if parent else 0,
-              'width': getfrom(node, "absoluteBoundingBox", "width"),
-              'height': getfrom(node, "absoluteBoundingBox", "height"),
-          }
+          x = absrel(node, parent, 'x') if parent else 0
+          y = absrel(node, parent, 'y') if parent else 0
+          width = getfrom(node, "absoluteBoundingBox", "width")
+          height = getfrom(node, "absoluteBoundingBox", "height")
 
       # general
       record = {
           **record,
           'node_id': node['id'],
           'parent_id': parent['id'] if parent else None,
+          'canvas_id': canvas,
           'type': type,
           'name': node['name'],
+          'visible': node.get('visible', True),
           'depth': current_depth,
+          'x': x,
+          'y': y,
+          'width': width,
+          'height': height,
           'opacity': node.get('opacity', 1),
           # 'color': node['fills'][0]['color'],
-          # fills
-          # strokes
-          'canvas_id': canvas,
+          'fills': node.get('fills'),
+          'effects': node.get('effects'),
+          'strokes': node.get('strokes'),
           'border_width': node.get('strokeWeight', 0),
           # 'border_color': ,
           'border_radius': node.get('cornerRadius', 0),
@@ -78,18 +77,37 @@ def process_node(node, depth, canvas, parent=None, current_depth=0):
           # 'box_shadow_offset_y': node['effects'][0]['offset']['y'],
           # 'box_shadow_blur': node['effects'][0]['radius'],
           # 'box_shadow_spread': node['effects'][0]['spread'],
-          # 'margin_top': ,
-          # 'margin_right': ,
-          # 'margin_left': ,
-          # 'margin_bottom': ,
-          # 'padding_top': ,
-          # 'padding_left': ,
-          # 'padding_right': ,
-          # 'padding_bottom': ,        
+          # 'box_shadow_color': node['effects'][0]['color'],
+          'padding_top': node.get('paddingTop', None),
+          'padding_left': node.get('paddingLeft', None),
+          'padding_right': node.get('paddingRight', None),
+          'padding_bottom': node.get('paddingBottom', None),
+
+          'constraints': node.get('constraints'),
+          'layout_align': node.get('layoutAlign'),
+          'layout_mode': node.get('layoutMode'),
+          'layout_positioning': node.get('layoutPositioning'),
+          'layout_grow': node.get('layoutGrow'),
+          'primary_axis_sizing_mode': node.get('primaryAxisSizingMode'),
+          'primary_axis_align_items': node.get('primaryAxisAlignItems'),
+          'counter_axis_sizing_mode': node.get('counterAxisSizingMode'),
+          'counter_axis_align_items': node.get('counterAxisAlignItems'),
+          'gap': node.get('itemSpacing'),
+          'reverse': node.get('reverse'),
+
+          'transition_node_id': node.get('transitionNodeID'),
+          'transition_duration': node.get('transitionDuration'),
+          'transition_easing': node.get('transitionEasing'),
+
+          'clips_content': node.get('clipsContent'),
+          'is_mask': node.get('isMask'),
+          'export_settings': node.get('exportSettings'),
+          'mix_blend_mode': node.get('blendMode'),
+          'aspect_ratio': width / height if node.get('preserveRatio') else None,
       }
 
       if type == "TEXT":
-          _style = node.get('style')
+          _style: dict = node.get('style')
           record = {
               **record,
               'text': node.get('characters', ''),
@@ -97,7 +115,16 @@ def process_node(node, depth, canvas, parent=None, current_depth=0):
               'font_weight': _style.get('fontWeight'),
               'font_size': _style.get('fontSize'),
               'text_align': _style.get('textAlignHorizontal'),
-          }    
+              'text_align_vertical': _style.get('textAlignVertical'),
+              'text_decoration': _style.get('textDecoration'),
+              'text_auto_resize': _style.get('textAutoResize'),
+              'letter_spacing': _style.get('letterSpacing'),
+          }
+
+
+          # remove style from record['data']
+          try: del record['data']['style']
+          except: ...
 
       # if the children is being handled, remove the 'children' from 'data' from record.
       if current_depth == depth:
