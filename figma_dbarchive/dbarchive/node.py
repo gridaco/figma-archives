@@ -323,10 +323,13 @@ def blend_colors_porter_duff(colors):
         
         return [(c1[i] * a1 + c2[i] * a2 * (1 - a1)) / a_out for i in range(3)] + [a_out]
 
-    result = [0, 0, 0, 0]
-    for color in colors:
-        result = porter_duff_over(result, color)
-    return result
+    try:
+      result = [0, 0, 0, 0]
+      for color in colors:
+          result = porter_duff_over(result, color)
+      return result
+    except:
+      return None
 
 def hex8(rgba):
     """
@@ -338,6 +341,6 @@ def hex8(rgba):
         return None
 
     if isinstance(rgba, dict):
-        rgba = [rgba['r'], rgba['g'], rgba['b'], rgba['a']]
+        rgba = [rgba['r'], rgba['g'], rgba['b'], rgba.get('a', 1)]
 
     return f'#{"".join([hex(int(c * 255))[2:].zfill(2) for c in rgba])}'
