@@ -32,7 +32,7 @@ def process_node(node: dict, depth, canvas, parent=None, current_depth=0):
       record = {}
 
       # switch-case types
-      type = node['type']
+      _type = node['type']
 
       # geometry
       record = {
@@ -62,8 +62,8 @@ def process_node(node: dict, depth, canvas, parent=None, current_depth=0):
       
       record = {
           **record,
-          'color': color and hex8(color),
-          'background_color': background_color and hex8(background_color),
+          'color': color and hex8(color) if _type == 'TEXT' else None,
+          'background_color': background_color and hex8(background_color) if _type != 'TEXT' else None,
           'border_color': hex8(zip_color(node, p='strokes')),
       }
 
@@ -73,7 +73,7 @@ def process_node(node: dict, depth, canvas, parent=None, current_depth=0):
           'node_id': node['id'],
           'parent_id': parent['id'] if parent else None,
           'canvas_id': canvas,
-          'type': type,
+          'type': _type,
           'name': node['name'],
           'visible': node.get('visible', True),
           'depth': current_depth,
@@ -132,7 +132,7 @@ def process_node(node: dict, depth, canvas, parent=None, current_depth=0):
           'aspect_ratio': (width / height if (height is not None and height > 0) else None) if node.get('preserveRatio') else None,
       }
 
-      if type == "TEXT":
+      if _type == "TEXT":
           _style: dict = node.get('style')
           record = {
               **record,
@@ -292,7 +292,7 @@ def paints(paints: list[dict], type=None):
     """
     filter out non visible paints
     """
-    visible = [paint for paint in paints if paint.get('visible', False)]
+    visible = [paint for paint in paints if paint.get('visible', True)]
     if type is None:
         return visible
     
