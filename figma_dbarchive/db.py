@@ -23,7 +23,7 @@ PBARPOS = 8
 @click.option("--shuffle", default=False, is_flag=True, help="Rather to shuffle order to process samples")
 @click.option("--gc", default=False, is_flag=True, help="Rather to use GC after each process")
 def main(mode, src, db, concurrency, depth, max, shuffle, gc):
-    dbthreshold = 4096 * concurrency * ((depth if depth is not None else 4) + 1)  # if db's qsize is bigger than this, wait the file processing for the db thread to catch up.
+    dbthreshold = 4096 * concurrency * ((depth if depth is not None else 4)** + 1)  # if db's qsize is bigger than this, wait the file processing for the db thread to catch up.
     
     if concurrency < 1:
         raise ValueError("Concurrency must be greater than 0")
