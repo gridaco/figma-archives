@@ -60,8 +60,13 @@ def fileworker(queue: Queue, db: Queue, depth, threshold=4096, clean=False):
                         'file_id': file_id,
                         **processed,
                         # dump here, so fileworker thread, so db thraed won't be overloaded.
-                        'data': json.dumps(processed['data']) if 'data' in processed else None,
-                        'children': json.dumps(processed['children']) if 'children' in processed else None,
+                        'data': strfy(processed.get('data')),
+                        'children': strfy(processed.get('children')),
+                        'fills': strfy(processed.get('fills')),
+                        'effects': strfy(processed.get('effects')),
+                        'constraints': strfy(processed.get('constraints')),
+                        'strokes': strfy(processed.get('strokes')),
+                        'export_settings': strfy(processed.get('export_settings')),
                     }
                     db.put((record, 'PUT'))
                     del processed
@@ -75,3 +80,10 @@ def fileworker(queue: Queue, db: Queue, depth, threshold=4096, clean=False):
             update_processed_files(1)
             continue
         time.sleep(0.1)
+
+def strfy(obj):
+    if obj is None:
+        return None
+    if isinstance(obj, dict):
+        return json.dumps(obj, indent=0, separators=(',', ':'))
+    return str(obj)
