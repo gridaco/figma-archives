@@ -103,7 +103,7 @@ def process_node(node: dict, depth, canvas, parent=None, current_depth=0):
           'is_mask': node.get('isMask'),
           'export_settings': node.get('exportSettings'),
           'mix_blend_mode': node.get('blendMode'),
-          'aspect_ratio': width / height if node.get('preserveRatio') else None,
+          'aspect_ratio': (width / height if height > 0 else None) if node.get('preserveRatio') else None,
       }
 
       if type == "TEXT":
@@ -114,6 +114,7 @@ def process_node(node: dict, depth, canvas, parent=None, current_depth=0):
               'font_family': _style.get('fontFamily'),
               'font_weight': _style.get('fontWeight'),
               'font_size': _style.get('fontSize'),
+              'font_style': 'italic' if _style.get('italic') else None,
               'text_align': _style.get('textAlignHorizontal'),
               'text_align_vertical': _style.get('textAlignVertical'),
               'text_decoration': _style.get('textDecoration'),

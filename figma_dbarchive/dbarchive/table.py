@@ -32,7 +32,7 @@ def create_table(conn: sqlite3.Connection):
         font_family TEXT,
         font_weight TEXT,
         font_size REAL,
-        fonst_style TEXT,
+        font_style TEXT,
         text_decoration TEXT,
         text_align TEXT,
         text_align_vertical TEXT,
@@ -61,7 +61,7 @@ def create_table(conn: sqlite3.Connection):
         counter_axis_align_items TEXT,
         gap REAL,
         reverse TEXT,
-        
+
         transition_duration REAL,
         transition_easing TEXT,
         clips_content TEXT,
@@ -90,8 +90,8 @@ def insert_node(
         constraints, layout_align, layout_mode, layout_positioning, layout_grow, primary_axis_sizing_mode, counter_axis_sizing_mode, primary_axis_align_items, counter_axis_align_items, gap, reverse, 
         transition_duration, transition_easing, clips_content, is_mask, export_settings, mix_blend_mode, aspect_ratio
     ) = (
-        kwargs['file_id'], kwargs['node_id'], kwargs.get('parent_id'), kwargs.get('canvas_id'), kwargs.get('transition_node_id'), kwargs['type'], kwargs['name'], kwargs.get('visible'),
-        kwargs.get('data'), kwargs['depth'], kwargs['children'], kwargs['n_children'],
+        kwargs['file_id'], kwargs['node_id'], kwargs.get('parent_id'), kwargs.get('canvas_id'), kwargs.get('transition_node_id'), kwargs['type'], kwargs['name'], kwargs['visible'],
+        kwargs.get('data'), kwargs['depth'], kwargs.get('children'), kwargs.get('n_children'),
         kwargs['x'], kwargs['x_abs'], kwargs['y'], kwargs['y_abs'], kwargs['width'], kwargs['height'], kwargs['rotation'],
         kwargs.get('opacity'), kwargs.get('color'), kwargs.get('effects'), kwargs.get('fills'),
         kwargs.get('text'), kwargs.get('font_family'), kwargs.get('font_weight'), kwargs.get('font_size'), kwargs.get('font_style'), kwargs.get('text_decoration'), kwargs.get('text_align'), kwargs.get('text_align_vertical'), kwargs.get('text_auto_resize'), kwargs.get('letter_spacing'),
@@ -104,14 +104,12 @@ def insert_node(
 
     cursor = conn.cursor()
 
-    if data is not None and type(data) is not str:
-        data = json.dumps(data, indent=0, separators=(',', ':'))
+    data = dumpstr(data)
+    fills = dumpstr(fills)
+    effects = dumpstr(effects)
+    constraints = dumpstr(constraints)
+    export_settings = dumpstr(export_settings)
     
-    if fills is not None and type(fills) is not str:
-        fills = json.dumps(fills, indent=0, separators=(',', ':'))
-    
-    if effects is not None and type(effects) is not str:
-        effects = json.dumps(effects, indent=0, separators=(',', ':'))
 
     cursor.execute(f'''INSERT OR IGNORE INTO nodes (
         file_id, node_id, parent_id, canvas_id, transition_node_id, type, name, visible, data, depth, children, n_children,
@@ -122,17 +120,21 @@ def insert_node(
         padding_top, padding_left, padding_right, padding_bottom,
         constraints, layout_align, layout_mode, layout_positioning, layout_grow, primary_axis_sizing_mode, counter_axis_sizing_mode, primary_axis_align_items, counter_axis_align_items, gap, reverse,
         transition_duration, transition_easing, clips_content, is_mask, export_settings, mix_blend_mode, aspect_ratio
-    ) VALUES ({','.join(['?'] * 61)})''', (
-        file_id, node_id, parent_id, canvas_id, transition_node_id, _type, name, visible, data, depth, children, n_children,
-        px(x), px(x_abs), px(y), px(y_abs), px(width), px(height), deg(rotation), o(opacity), color, effects, fills,
-        text, font_family, font_weight, px(font_size), font_style, text_decoration, text_align, text_align_vertical, text_auto_resize, px(letter_spacing),
-        px(border_width), border_color, px(border_radius),
-        px(box_shadow_offset_x), px(box_shadow_offset_y), px(box_shadow_blur), px(box_shadow_spread),
+    ) VALUES ({','.join(['?'] * 62)})''', (
+        file_id, node_id, parent_id, canvas_id, transition_node_id, _type, name, visible, data, depth, children, n_children, # 12
+        px(x), px(x_abs), px(y), px(y_abs), px(width), px(height), deg(rotation), o(opacity), color, effects, fills, # 11
+        text, font_family, font_weight, px(font_size), font_style, text_decoration, text_align, text_align_vertical, text_auto_resize, px(letter_spacing), # 10
+        px(border_width), border_color, px(border_radius), # 3
+        px(box_shadow_offset_x), px(box_shadow_offset_y), px(box_shadow_blur), px(box_shadow_spread), # 4
         px(padding_top), px(padding_left), px(padding_right), px(padding_bottom),
         constraints, layout_align, layout_mode, layout_positioning, layout_grow, primary_axis_sizing_mode, counter_axis_sizing_mode, primary_axis_align_items, counter_axis_align_items, px(gap), reverse,
         transition_duration, transition_easing, clips_content, is_mask, export_settings, mix_blend_mode, aspect_ratio
     ))
     conn.commit()
+
+
+def dumpstr(obj):
+    return json.dumps(obj, indent=0, separators=(',', ':')) if obj is not None and type(obj) is not str else obj
 
 
 def get_node(conn: sqlite3.Connection, file_id: str, node_id: str):
