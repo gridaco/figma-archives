@@ -29,7 +29,7 @@ def move(src, dst, threads):
         for item in sorted_items:
             file_queue.put(item)
 
-    def move_files():
+    def move_files(pbar):
         while not file_queue.empty():
             src_item = file_queue.get()
             dst_item = dst_path.joinpath(src_item.relative_to(src_path))
@@ -40,9 +40,11 @@ def move(src, dst, threads):
                     shutil.move(str(src_item), str(dst_item))
                 elif src_item.is_dir():
                     os.rmdir(str(src_item))
-                tqdm.write(f'Moved: {src_item} -> {dst_item}')
+                tqdm.write(f'☑ {src_item} → {dst_item}')
             except Exception as e:
-                tqdm.write(f'Error moving {src_item}: {e}')
+                tqdm.write(f'☒ {src_item}: {e}')
+            finally:
+                pbar.update(1)
             file_queue.task_done()
 
     # Index files
@@ -53,7 +55,7 @@ def move(src, dst, threads):
     print(f'Moving files using {threads} threads...')
     with tqdm(total=file_queue.qsize()) as pbar:
         for _ in range(threads):
-            t = threading.Thread(target=move_files)
+            t = threading.Thread(target=move_files,  args=(pbar,))
             t.start()
 
         while not file_queue.empty():
