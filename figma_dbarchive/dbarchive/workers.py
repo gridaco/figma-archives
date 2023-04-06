@@ -85,5 +85,5 @@ def strfy(obj):
     if obj is None:
         return None
     if isinstance(obj, dict):
-        return json.dumps(obj, indent=0, separators=(',', ':'))
+        return json.dumps(obj, separators=(',', ':'))
     return str(obj)

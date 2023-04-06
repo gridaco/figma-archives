@@ -134,7 +134,7 @@ def insert_node(
 
 
 def dumpstr(obj):
-    return json.dumps(obj, indent=0, separators=(',', ':')) if obj is not None and type(obj) is not str else obj
+    return json.dumps(obj, separators=(',', ':')) if obj is not None and type(obj) is not str else obj
 
 
 def get_node(conn: sqlite3.Connection, file_id: str, node_id: str):

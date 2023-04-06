@@ -70,9 +70,9 @@ def process_node(node: dict, depth, canvas, parent=None, current_depth=0):
           'fills': node.get('fills'),
           'effects': node.get('effects'),
           'strokes': node.get('strokes'),
-          'border_width': node.get('strokeWeight', 0),
+          'border_width': node.get('strokeWeight', None) if len(node.get('strokes', [])) > 0 else None,
+          'border_radius': node.get('cornerRadius', None),
           # 'border_color': ,
-          'border_radius': node.get('cornerRadius', 0),
           # 'box_shadow_offset_x': node['effects'][0]['offset']['x'],
           # 'box_shadow_offset_y': node['effects'][0]['offset']['y'],
           # 'box_shadow_blur': node['effects'][0]['radius'],
@@ -102,8 +102,8 @@ def process_node(node: dict, depth, canvas, parent=None, current_depth=0):
           'clips_content': node.get('clipsContent'),
           'is_mask': node.get('isMask'),
           'export_settings': node.get('exportSettings'),
-          'mix_blend_mode': node.get('blendMode'),
-          'aspect_ratio': (width / height if height > 0 else None) if node.get('preserveRatio') else None,
+          'mix_blend_mode': None if node.get('blendMode') == 'PASS_THROUGH' else node.get('blendMode'),
+          'aspect_ratio': (width / height if (height is not None and height > 0) else None) if node.get('preserveRatio') else None,
       }
 
       if type == "TEXT":
@@ -142,7 +142,32 @@ def process_node(node: dict, depth, canvas, parent=None, current_depth=0):
               record['data'] = node
 
       # finally, safely remove all keys from record, from record['data'] to reduce the size of the record.
-      for k in [key for key in record.keys()]:
+      rms = [
+          'absoluteBoundingBox', 
+          'absoluteRenderBounds',
+          'blendMode',
+          'scrollBehavior',
+          'strokeWeight',
+          'characters',
+          'style',
+          'characterStyleOverrides',
+          'styleOverrideTable',
+          'layoutAlign',
+          'layoutGrow',
+          'clipsContent',
+          'background',
+          'layoutMode',
+          'counterAxisSizingMode',
+          'itemSpacing',
+          'primaryAxisSizingMode',
+          'counterAxisAlignItems',
+          'primaryAxisAlignItems',
+          'paddingLeft',
+          'paddingRight',
+          'paddingTop',
+          'paddingBottom',
+      ]
+      for k in [key for key in record.keys()] + rms:
           if k in record['data']:
               try: del record['data'][k] 
               except: ...
