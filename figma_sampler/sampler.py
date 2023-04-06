@@ -54,11 +54,11 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
         meta_data = {obj["id"]: obj for obj in meta_data}
 
     dir_files_archive = Path(dir_files_archive)
-    dir_images_archive = Path(dir_images_archive)
-
-    if not skip_images and not dir_images_archive.exists():
-        raise click.UsageError(
-            'Images archive directory does not exist')
+    if not skip_images:
+        dir_images_archive = Path(dir_images_archive)
+        if not dir_images_archive.exists():
+            raise click.UsageError(
+                'Images archive directory does not exist')
 
     # create root output dir
     output = Path(output)
