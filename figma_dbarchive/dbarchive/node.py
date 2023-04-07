@@ -64,6 +64,7 @@ def process_node(node: dict, depth, canvas, parent=None, current_depth=0):
           **record,
           'color': color and hex8(color) if _type == 'TEXT' else None,
           'background_color': background_color and hex8(background_color) if _type != 'TEXT' else None,
+          'background_image': zip_background_image(node),
           'border_color': hex8(zip_color(node, p='strokes')),
       }
 
@@ -263,6 +264,28 @@ def zip_export_settings(node):
     formats = [setting['format'] for setting in node['exportSettings']]
     return max(formats, key=formats.count)
 
+
+def zip_background_image(node: dict):
+    image_paints = paints(node.get('fills'), type='IMAGE')
+
+    def imgref(imgpaint):
+        return imgpaint.get('imageRef') or imgpaint.get('gifRef')
+
+    if len(image_paints) == 0:
+        return None
+
+    if len(image_paints) == 1:
+        return imgref(image_paints[0])
+    
+    # return the first opacity 1 image, if all images are opacity lower than 1, return the first image.
+    for image in image_paints:
+        if image.get('opacity', 1) == 1:
+            return imgref(image)
+
+    return imgref(image_paints[0])
+    
+
+
 def zip_color(node, p='fills'):
     if p not in node or node[p] is None or len(node[p]) == 0:
         return None
@@ -292,9 +315,18 @@ def paints(paints: list[dict], type=None):
     """
     filter out non visible paints
     """
+
+    if paints is None:
+        return []
+    # visible = True
     visible = [paint for paint in paints if paint.get('visible', True)]
+
+    # opacity > 0
+    visible = [paint for paint in visible if paint.get('opacity', 1) > 0]
+
     if type is None:
         return visible
+    
     
     # filter with type
     return [paint for paint in visible if paint['type'] == type]

@@ -27,6 +27,7 @@ def create_table(conn: sqlite3.Connection):
         opacity REAL,
         color TEXT,
         background_color TEXT,
+        background_image TEXT,
         effects TEXT,
         fills TEXT,
         strokes TEXT,
@@ -92,7 +93,7 @@ def insert_node(
         file_id, node_id, parent_id, canvas_id, transition_node_id, _type, name, visible,
         data, depth, children, n_children,
         x, x_abs, y, y_abs, width, height, rotation, 
-        opacity, color, background_color, effects, fills, strokes,
+        opacity, color, background_color, background_image, effects, fills, strokes,
         characters, font_family, font_weight, font_size, font_style, text_decoration, text_align, text_align_vertical, text_auto_resize, letter_spacing, 
         stroke_linecap, border_alignment, border_width, border_color, border_radius, 
         box_shadow_offset_x, box_shadow_offset_y, box_shadow_blur, box_shadow_spread, 
@@ -104,7 +105,7 @@ def insert_node(
         kwargs['file_id'], kwargs['node_id'], kwargs.get('parent_id'), kwargs.get('canvas_id'), kwargs.get('transition_node_id'), kwargs['type'], kwargs['name'], kwargs['visible'],
         kwargs.get('data'), kwargs['depth'], kwargs.get('children'), kwargs.get('n_children'),
         kwargs['x'], kwargs['x_abs'], kwargs['y'], kwargs['y_abs'], kwargs['width'], kwargs['height'], kwargs['rotation'],
-        kwargs.get('opacity'), kwargs.get('color'), kwargs.get('background_color'), kwargs.get('effects'), kwargs.get('fills'), kwargs.get('strokes'),
+        kwargs.get('opacity'), kwargs.get('color'), kwargs.get('background_color'), kwargs.get('background_image'), kwargs.get('effects'), kwargs.get('fills'), kwargs.get('strokes'),
         kwargs.get('characters'), kwargs.get('font_family'), kwargs.get('font_weight'), kwargs.get('font_size'), kwargs.get('font_style'), kwargs.get('text_decoration'), kwargs.get('text_align'), kwargs.get('text_align_vertical'), kwargs.get('text_auto_resize'), kwargs.get('letter_spacing'),
         kwargs.get('stroke_linecap'), kwargs.get('border_alignment'), kwargs.get('border_width'), kwargs.get('border_color'), kwargs.get('border_radius'),
         kwargs.get('box_shadow_offset_x'), kwargs.get('box_shadow_offset_y'), kwargs.get('box_shadow_blur'), kwargs.get('box_shadow_spread'),
@@ -120,7 +121,7 @@ def insert_node(
     # PUT
     cursor.execute(f'''INSERT OR REPLACE INTO nodes (
         file_id, node_id, parent_id, canvas_id, transition_node_id, type, name, visible, data, depth, children, n_children,
-        x, x_abs, y, y_abs, width, height, rotation, opacity, color, background_color, effects, fills, strokes,
+        x, x_abs, y, y_abs, width, height, rotation, opacity, color, background_color, background_image, effects, fills, strokes,
         characters, n_characters, font_family, font_weight, font_size, font_style, text_decoration, text_align, text_align_vertical, text_auto_resize, letter_spacing,
         stroke_linecap, border_alignment, border_width, border_color, border_radius,
         box_shadow_offset_x, box_shadow_offset_y, box_shadow_blur, box_shadow_spread,
@@ -128,9 +129,9 @@ def insert_node(
         constraint_vertical, constraint_horizontal, layout_align, layout_mode, layout_positioning, layout_grow, primary_axis_sizing_mode, counter_axis_sizing_mode, primary_axis_align_items, counter_axis_align_items, gap, reverse,
         fill_geometry, stroke_geometry,
         transition_duration, transition_easing, clips_content, is_mask, export_settings, mix_blend_mode, aspect_ratio
-    ) VALUES ({','.join(['?'] * 70)})''', (
+    ) VALUES ({','.join(['?'] * 71)})''', (
         file_id, node_id, parent_id, canvas_id, transition_node_id, _type, name, visible, data, depth, children, n_children, # 12
-        px(x), px(x_abs), px(y), px(y_abs), px(width), px(height), deg(rotation), o(opacity), color, background_color, effects, fills, strokes, # 12
+        px(x), px(x_abs), px(y), px(y_abs), px(width), px(height), deg(rotation), o(opacity), color, background_color, background_image, effects, fills, strokes, # 12
         characters, n_characters, font_family, font_weight, px(font_size), font_style, text_decoration, text_align, text_align_vertical, text_auto_resize, px(letter_spacing), # 10
         stroke_linecap, border_alignment, px(border_width), border_color, px(border_radius), # 5
         px(box_shadow_offset_x), px(box_shadow_offset_y), px(box_shadow_blur), px(box_shadow_spread), # 4
