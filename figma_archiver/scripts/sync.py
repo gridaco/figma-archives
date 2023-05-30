@@ -30,16 +30,18 @@ def main(dir, out, list_file):
     target_keys = open(list_file, 'r').read().splitlines()
     target_keys = [k for k in target_keys if k != '']
 
+    success = 0
     for key in tqdm(target_keys):
       # check if key exists in dir
       if Path(dir / key).exists():
         # copy to out
         shutil.copytree(dir / key, out / key)
         tqdm.write(f"📦 {dir / key} → {out / key}")
+        success += 1
       else:
         tqdm.write(f"❌ {key}")
     
-    print(f"📦 {len(target_keys)} files copied from '{dir}' to '{out}'")
+    print(f"📦 {success}/{len(target_keys)} files copied from '{dir}' to '{out}'")
 
 if __name__ == '__main__':
     main()
