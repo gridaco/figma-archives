@@ -38,7 +38,7 @@ Once complete, the output directory will be populated with the following files.
 │   │   │   ├── :hash.png
 │   │   │   ├── :hash.png
 │   │   │   ├── :hash.png
-│   │   ├── bakes
+│   │   ├── exports
 │   │   │   ├── :node.png
 │   │   │   ├── :node.png
 │   │   │   ├── :node.png

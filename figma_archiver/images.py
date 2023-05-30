@@ -43,7 +43,7 @@ BOTTOM_POSITION = 24
 @click.command()
 @click.option("-v", "--version", default=0, type=click.INT, help="Version number to specify cache - update for new versions")
 @click.option("-dir", default="./downloads", type=click.Path(exists=True, file_okay=False, dir_okay=True), help="Directory containing the JSON files")
-@click.option("-fmt", '--format',  default="png", help="Image format to bake the layers")
+@click.option("-fmt", '--format',  default="png", help="Image format to export the layers")
 @click.option("-s", '--scale', default="1", help="Image scale")
 @click.option("-d", '--depth',  default=None, help="Layer depth to go recursively", type=click.INT)
 @click.option('--skip-canvas',  default=True, help="Skips the canvas while exporting images")
@@ -63,9 +63,9 @@ def main(version, dir, format, scale, depth, skip_canvas, no_fills, optimize, ma
     BOTTOM_POSITION = concurrency * 2 + 5
 
     if only_thumbnails:
-        tqdm.write('Thumbnails only option passed. Ignoring other fills or bakes related options.')
+        tqdm.write('Thumbnails only option passed. Ignoring other fills or export related options.')
         no_fills = True # skip image fills
-        depth = 0 # skip bakes
+        depth = 0 # skip exports
 
     # figma token
     if figma_token.startswith("[") and figma_token.endswith("]"):
@@ -191,8 +191,8 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                             tqdm.write(f"☑ {fixstr(f'(existing) Saved {(saved / 1024 / 1024):.2f}MB')}... → {file}")
 
           # ----------------------------------------------------------------------
-          # bakes
-          images_dir = subdir / "bakes"
+          # exports
+          images_dir = subdir / "exports"
           images_dir.mkdir(parents=True, exist_ok=True)
           existing_images = os.listdir(images_dir)
 
