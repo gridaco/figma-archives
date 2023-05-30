@@ -42,11 +42,11 @@ BOTTOM_POSITION = 24
 
 @click.command()
 @click.option("-v", "--version", default=0, type=click.INT, help="Version number to specify cache - update for new versions")
-@click.option("-dir", default="./downloads", type=click.Path(exists=True, file_okay=False, dir_okay=True), help="Directory containing the JSON files")
+@click.option("-dir", default="./downloads", type=click.Path(exists=True, file_okay=False, dir_okay=True), help="Directory for the images to be saved - ~dir/:key/images/.png")
 @click.option("-fmt", '--format',  default="png", help="Image format to export the layers")
 @click.option("-s", '--scale', default="1", help="Image scale")
 @click.option("-d", '--depth',  default=None, help="Layer depth to go recursively", type=click.INT)
-@click.option('--skip-canvas',  default=True, help="Skips the canvas while exporting images")
+@click.option('--include-canvas',  default=False, help="Includes the canvas while exporting images (False by default)")
 @click.option('--no-fills',  default=False, help="Skips the download for Image fills")
 @click.option("--optimize", is_flag=True, help="Optimize images size (Now only applied to hash images)", default=False, type=click.BOOL)
 @click.option("--max-mb-hash", help="Max mb to be applied to has images (if optimize is true)", default=1, type=click.INT)
@@ -57,7 +57,7 @@ BOTTOM_POSITION = 24
 @click.option("--skip-n", help="Number of files to skip (for dubugging).", default=0, type=int)
 @click.option("--no-download", is_flag=True, help="No downloading the images (This can be used if you want this script to only run for optimizing existing images)", default=0, type=int)
 @click.option("--shuffle", is_flag=True, help="Rather if to randomize the input for even distribution", default=False, type=click.BOOL)
-def main(version, dir, format, scale, depth, skip_canvas, no_fills, optimize, max_mb_hash, only_thumbnails, figma_token, source_dir, concurrency, skip_n, no_download, shuffle):
+def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize, max_mb_hash, only_thumbnails, figma_token, source_dir, concurrency, skip_n, no_download, shuffle):
     # progress bar position config
     global BOTTOM_POSITION
     BOTTOM_POSITION = concurrency * 2 + 5
@@ -111,7 +111,7 @@ def main(version, dir, format, scale, depth, skip_canvas, no_fills, optimize, ma
         'root_dir': root_dir,
         'src_dir': _src_dir,
         'img_queue': img_queue,
-        'skip_canvas': skip_canvas,
+        'include_canvas': include_canvas,
         'no_fills': no_fills,
         'figma_token': figma_tokens[(_ + 1) % len(figma_tokens)],
         'format': format,
@@ -139,7 +139,7 @@ def main(version, dir, format, scale, depth, skip_canvas, no_fills, optimize, ma
     # finally wait for the download thread to finish
     download_thread.join()
 
-def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, skip_canvas: bool, no_fills: bool, figma_token: str, format: str, scale: int, optimize: bool, max_mb_hash: int, depth: int, index: int, size: int, pbar: tqdm, concurrency: int, no_download: bool):
+def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, include_canvas: bool, no_fills: bool, figma_token: str, format: str, scale: int, optimize: bool, max_mb_hash: int, depth: int, index: int, size: int, pbar: tqdm, concurrency: int, no_download: bool):
     # for key, json_file in files:
     for key, json_file in tqdm(files, desc=f"⚡️ {figma_token[:8]}", position=BOTTOM_POSITION-(index+4), leave=True, total=size):
         subdir: Path = root_dir / key
@@ -158,7 +158,7 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
             # tqdm.write(f"Saved thumbnail to {subdir / 'thumbnail.png'}")
 
           node_ids = get_node_ids(
-              file_data, depth=depth, skip_canvas=skip_canvas)
+              file_data, depth=depth, include_canvas=include_canvas)
           # ----------------------------------------------------------------------
           # image fills
           if not no_fills:
@@ -576,15 +576,15 @@ def read_file_data(file: Path):
 
 
 
-def get_node_ids(data, depth=None, skip_canvas=True):
+def get_node_ids(data, depth=None, include_canvas=False):
     """
 
-    In most cases, you want to set depth to 1 or None with skip_canvas=True.
+    In most cases, you want to set depth to 1 or None with include_canvas=False.
 
     depth:
      - None means no limit
-     - 0 means no nodes, retrurns only canvas ids (if skip_canvas is False) otherwise empty list
-     - 1 means only canvas ids (if skip_canvas is False) and direct children of canvas
+     - 0 means no nodes, retrurns only canvas ids (if include_canvas is True) otherwise empty list
+     - 1 means only canvas ids (if include_canvas is True) and direct children of canvas
 
     ...
     """
@@ -598,19 +598,20 @@ def get_node_ids(data, depth=None, skip_canvas=True):
                 ids.extend(extract_ids_recursively(child, current_depth + 1))
         return ids
 
-    if skip_canvas:
-        return [
-            id_
-            for canvas in data["document"]["children"]
-            for child in canvas['children']
-            for id_ in extract_ids_recursively(child, 0)
-        ]
-
+    if include_canvas:
+      return [
+          id_
+          for child in data["document"]["children"]
+          for id_ in extract_ids_recursively(child, 0)
+      ]
+    
     return [
         id_
-        for child in data["document"]["children"]
+        for canvas in data["document"]["children"]
+        for child in canvas['children']
         for id_ in extract_ids_recursively(child, 0)
     ]
+
 
 
 def get_existing_images(images_dir):
