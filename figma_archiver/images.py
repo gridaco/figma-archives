@@ -51,21 +51,27 @@ BOTTOM_POSITION = 24
 @click.option("--optimize", is_flag=True, help="Optimize images size (Now only applied to hash images)", default=False, type=click.BOOL)
 @click.option("--max-mb-hash", help="Max mb to be applied to has images (if optimize is true)", default=1, type=click.INT)
 @click.option('--only-thumbnails', is_flag=True, default=False, help="process only thumbnails. this is usefull when thumbnail is expired & files are fresh-fetched")
+@click.option('--thumbnails', is_flag=True, default=False, help="Set this flag to download thumbnail.png as well")
 @click.option("-t", "--figma-token", help="Figma API access token.", default=os.getenv("FIGMA_ACCESS_TOKEN"), type=str)
 @click.option("-src", '--source-dir', default="./downloads/*.json", help="Path to the JSON file")
 @click.option("-c", "--concurrency", help="Number of concurrent processes.", default=cpu_count(), type=int)
 @click.option("--skip-n", help="Number of files to skip (for dubugging).", default=0, type=int)
 @click.option("--no-download", is_flag=True, help="No downloading the images (This can be used if you want this script to only run for optimizing existing images)", default=0, type=int)
 @click.option("--shuffle", is_flag=True, help="Rather if to randomize the input for even distribution", default=False, type=click.BOOL)
-def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize, max_mb_hash, only_thumbnails, figma_token, source_dir, concurrency, skip_n, no_download, shuffle):
+def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize, max_mb_hash, thumbnails, only_thumbnails, figma_token, source_dir, concurrency, skip_n, no_download, shuffle):
     # progress bar position config
     global BOTTOM_POSITION
     BOTTOM_POSITION = concurrency * 2 + 5
 
     if only_thumbnails:
-        tqdm.write('Thumbnails only option passed. Ignoring other fills or export related options.')
-        no_fills = True # skip image fills
-        depth = 0 # skip exports
+        if thumbnails:
+            tqdm.write('Thumbnails only option passed. Ignoring other fills or export related options.')
+            no_fills = True # skip image fills
+            depth = 0 # skip exports
+        else:
+            # error out
+            click.echo("Error: --only-thumbnails option requires --thumbnails option to be set as well")
+            return
 
     # figma token
     if figma_token.startswith("[") and figma_token.endswith("]"):
@@ -113,6 +119,7 @@ def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize,
         'img_queue': img_queue,
         'include_canvas': include_canvas,
         'no_fills': no_fills,
+        'thumbnails': thumbnails,
         'figma_token': figma_tokens[(_ + 1) % len(figma_tokens)],
         'format': format,
         'scale': scale,
@@ -139,7 +146,7 @@ def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize,
     # finally wait for the download thread to finish
     download_thread.join()
 
-def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, include_canvas: bool, no_fills: bool, figma_token: str, format: str, scale: int, optimize: bool, max_mb_hash: int, depth: int, index: int, size: int, pbar: tqdm, concurrency: int, no_download: bool):
+def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, include_canvas: bool, no_fills: bool, thumbnails: bool, figma_token: str, format: str, scale: int, optimize: bool, max_mb_hash: int, depth: int, index: int, size: int, pbar: tqdm, concurrency: int, no_download: bool):
     # for key, json_file in files:
     for key, json_file in tqdm(files, desc=f"⚡️ {figma_token[:8]}", position=BOTTOM_POSITION-(index+4), leave=True, total=size):
         subdir: Path = root_dir / key
@@ -151,11 +158,12 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
         if file_data:
           if depth is not None:
               depth = int(depth)
-          # fetch and save thumbnail (if not already downloaded)
-          if not (subdir / "thumbnail.png").is_file() and not no_download:
-            thumbnail_url = file_data["thumbnailUrl"]
-            download_image(thumbnail_url, subdir / "thumbnail.png")
-            # tqdm.write(f"Saved thumbnail to {subdir / 'thumbnail.png'}")
+          if thumbnails:
+              # fetch and save thumbnail (if not already downloaded)
+              if not (subdir / "thumbnail.png").is_file() and not no_download:
+                thumbnail_url = file_data["thumbnailUrl"]
+                download_image(thumbnail_url, subdir / "thumbnail.png")
+                # tqdm.write(f"Saved thumbnail to {subdir / 'thumbnail.png'}")
 
           node_ids = get_node_ids(
               file_data, depth=depth, include_canvas=include_canvas)
