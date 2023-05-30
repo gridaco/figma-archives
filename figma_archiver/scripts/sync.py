@@ -35,7 +35,7 @@ def main(dir, out, list_file):
       if Path(dir / key).exists():
         # copy to out
         shutil.copytree(dir / key, out / key)
-        tqdm.write(f"📦 {key}")
+        tqdm.write(f"📦 {dir / key} → {out / key}")
       else:
         tqdm.write(f"❌ {key}")
     
