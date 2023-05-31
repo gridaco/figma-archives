@@ -155,7 +155,7 @@ def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize,
     for _ in tqdm(json_files, desc="🔥 Final Validation & Meta Sync", position=BOTTOM_POSITION, leave=True):
       key = Path(_).stem
       sync_metadata_for_exports(root_dir=root_dir, src_dir=_src_dir, key=key)
-      sync_metadata_for_hash_images(root_dir=root_dir, key=key)
+      sync_metadata_for_hash_images(root_dir=root_dir, src_dir=_src_dir, key=key)
       tqdm.write(f"🔥 {root_dir/key}")
 
 def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, include_canvas: bool, no_fills: bool, thumbnails: bool, figma_token: str, format: str, scale: int, optimize: bool, max_mb_hash: int, depth: int, index: int, size: int, pbar: tqdm, concurrency: int, no_download: bool):
@@ -197,7 +197,7 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                 ]
 
                 # we don't use queue for has images
-                fetch_and_save_images(url_and_path_pairs, max_mb=max_mb_hash)
+                fetch_and_save_image_fills(url_and_path_pairs, max_mb=max_mb_hash)
                 # for pair in url_and_path_pairs:
                 #   img_queue.put(pair + (max_mb_hash,))
             else:
@@ -355,7 +355,7 @@ def image_queue_handler(img_queue: queue.Queue, batch=64, timeout=3600):
 
     tqdm.write("✅ Image Archiving Complete")
 
-def fetch_and_save_images(url_and_path_pairs, max_mb=1, position=5, num_threads=64):
+def fetch_and_save_image_fills(url_and_path_pairs, max_mb=1, position=5, num_threads=64):
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
         futures = {executor.submit(download_image, url, path, max_mb): (url, path) for url, path in url_and_path_pairs}
 
@@ -571,11 +571,44 @@ def log_error(msg, print=False):
     except Exception as e:...
 
 
-def sync_metadata_for_hash_images(root_dir, key):
+def save_optimization_info(root_dir, key, image, optimization):
+    """
+    TODO:
+    """
+    path = Path(root_dir) / key / "images"
+    metadata = path / "meta.json" # would be /:filekey/exports/meta.json
+    is_new = not metadata.exists()
+    # read the metadata
+    with open(metadata, "w+") as f:
+        try: olddata = json.load(f) if not is_new else {} 
+        except json.JSONDecodeError: olddata = {}
+
+        data = {
+            **olddata,
+            "optimization": {
+                **(olddata["optimization"] if "optimization" in olddata else {}),
+                # saves the scale factor (if optimized)
+                [image]: {
+                    "scale": optimization["scale"],
+                    "original": {
+                        "size": optimization["original_size"],
+                        "width": optimization["original_width"],
+                        "height": optimization["original_height"],
+                    },
+                    "loss": optimization["loss"]
+                }
+            }
+        }
+        json.dump(data, f, separators=(',', ':'))
+        f.close()
+
+
+def sync_metadata_for_hash_images(root_dir, src_dir, key):
     """
     syncs the meta.json file for the hash images
     """
     path = Path(root_dir) / key / "images"
+    document = read_file_data(Path(src_dir) / f"{key}.json")
     metadata: Path = path / "meta.json" # would be /:filekey/exports/meta.json
     files = [Path(file) for file in filter_graphic_files(os.listdir(path))]
     hashes = [file.stem for file in files]
@@ -595,6 +628,11 @@ def sync_metadata_for_hash_images(root_dir, key):
         data = {
             **olddata,
             # follows the figma-api format, "meta" key shall not be changed
+            "document": {
+                "version": document["version"],
+                "lastModified": document["lastModified"]
+            },
+            "archivedAt": datetime.now().isoformat(), # the last mod date of the meta file (a.k.a last archived)
             "meta": {
                 "images": images
             },
