@@ -1,5 +1,12 @@
 {
   "name": "@figma-api/community",
+  "description": "Figma Community API",
+  "keywords": [
+    "Fimga",
+    "Figma Community",
+    "API",
+    "Data set"
+  ],
   "version": "0.0.0",
   "private": false,
   "main": "dist/index.js",
