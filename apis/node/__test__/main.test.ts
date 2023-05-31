@@ -1,0 +1,35 @@
+import { Client } from "../src/index";
+
+const client = Client();
+
+test("get file", async () => {
+  const { data } = await client.file("767122733527420957");
+  expect(data).toHaveProperty("document");
+  // console.log(data);
+
+  // pass this tets
+  expect(1).toBe(1);
+});
+
+test("export image", async () => {
+  const nodeid = "0:594";
+  const { data } = await client.fileImages("767122733527420957", {
+    format: "png",
+    scale: 1,
+    ids: [nodeid],
+  });
+  expect(data).toHaveProperty("images");
+  console.log(data);
+
+  // pass this tets
+  expect(1).toBe(1);
+});
+
+test("image fills", async () => {
+  const { data } = await client.fileImageFills("767122733527420957");
+  expect(data).toHaveProperty("meta");
+  console.log(data);
+
+  // pass this tets
+  expect(1).toBe(1);
+});

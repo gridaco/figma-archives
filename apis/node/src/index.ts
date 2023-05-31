@@ -167,8 +167,8 @@ export const Client = (): ClientInterface => {
         );
         const url =
           scale === 1 || scale === undefined
-            ? `${k.BUCKET_FIGMA_COMMUNITY_IMAGES_OFFICIAL_ARCHIVE}/${fileId}/${id}.${format}`
-            : `${k.BUCKET_FIGMA_COMMUNITY_IMAGES_OFFICIAL_ARCHIVE}/${fileId}/${id}${resolution}`;
+            ? `${k.BUCKET_FIGMA_COMMUNITY_IMAGES_OFFICIAL_ARCHIVE}/${fileId}/exports/${id}.${format}`
+            : `${k.BUCKET_FIGMA_COMMUNITY_IMAGES_OFFICIAL_ARCHIVE}/${fileId}/exports/${id}${resolution}`;
         return {
           ...acc,
           [id]: url,
@@ -194,7 +194,15 @@ export const Client = (): ClientInterface => {
           data: {
             error: false,
             status: 200,
-            meta: data.meta,
+            meta: {
+              images: Object.keys(data.meta.images).reduce((acc, key) => {
+                const image = data.meta.images[key];
+                return {
+                  ...acc,
+                  [key]: `${k.BUCKET_FIGMA_COMMUNITY_IMAGES_OFFICIAL_ARCHIVE}/${fileId}/images/${image}`,
+                };
+              }, {}),
+            },
           },
         };
       } else {
