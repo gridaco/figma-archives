@@ -642,7 +642,8 @@ def sync_metadata_for_exports(root_dir, src_dir, key):
     # reversed_depths
     depths_ids_map = {}
     for k, v in depths.items():
-      depths_ids_map.setdefault(v, []).append(k)
+      # the depth to be saved follows the format from figma api, where it starts from 1, not 0, where 1 is page (canvas), 2 being top level nodes.
+      depths_ids_map.setdefault(v + 1, []).append(k)
 
 
     data = {
@@ -654,8 +655,8 @@ def sync_metadata_for_exports(root_dir, src_dir, key):
         "resolutions": resolutions, # the resolutions that are exported
         "map": node_exports,
         "depths": {
-            "min": 0,
-            "max": maxdepth,
+            "min": 1,
+            "max": maxdepth + 1,
             **depths_ids_map
         },
     }
