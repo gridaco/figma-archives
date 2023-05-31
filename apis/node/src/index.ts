@@ -153,31 +153,53 @@ export const Client = (): ClientInterface => {
     //     },
     //   }),
 
-    fileImages: (fileId, params) =>
-      clients.image.get(`images/${fileId}`, {
-        params: {
-          ...params,
-          ids: params.ids.join(","),
-        },
-      }),
+    fileImages: async (fileId, { format: _format, ids, scale: _scale }) => {
+      const res = await clients.image.get(`/${fileId}/exports/meta.json`);
+      const { data } = res;
 
-    fileImageFills: async (fileId) => {
-      // TODO:
-      const res = await clients.image.get(`files/${fileId}/images/meta.json`);
+      const format = _format || "png";
+      const scale = _scale || 1;
+
+      const images = ids.reduce((acc, id) => {
+        const exports: Array<string> = data.map[id];
+        const resolution = exports.find(
+          (d: string) => d === `@${scale}x.${format}`
+        );
+        const url =
+          scale === 1 || scale === undefined
+            ? `${k.BUCKET_FIGMA_COMMUNITY_IMAGES_OFFICIAL_ARCHIVE}/${fileId}/${id}.${format}`
+            : `${k.BUCKET_FIGMA_COMMUNITY_IMAGES_OFFICIAL_ARCHIVE}/${fileId}/${id}${resolution}`;
+        return {
+          ...acc,
+          [id]: url,
+        };
+      }, {});
 
       return {
         ...res,
         data: {
-          error: false,
-          status: 200,
-          meta: {
-            images: {
-              // TODO: add here
-              ":hash": "~/:hash.png",
-            },
-          },
+          err: null,
+          images,
         },
       };
+    },
+
+    fileImageFills: async (fileId) => {
+      const res = await clients.image.get(`/${fileId}/images/meta.json`);
+      const { data } = res;
+
+      if (res.status === 200) {
+        return {
+          ...res,
+          data: {
+            error: false,
+            status: 200,
+            meta: data.meta,
+          },
+        };
+      } else {
+        return res;
+      }
     },
   };
 };
