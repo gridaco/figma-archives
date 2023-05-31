@@ -65,4 +65,12 @@ python3 sampler.py\
   --output='/Volumes/WDB2TB/Data/figma-archives'\
   --dir-files-archive='/Volumes/WDB2TB/Data/figma-scraper-archives'\
   --dir-images-archive='/Volumes/WDB2TB/Data/figma-scraper-image-archives'\
+
+# sampling only images
+python3 sampler.py\
+  --index='../data/samples/500'\
+  --output='/Volumes/WDB2TB/Data/figma-image-samples-500'\
+  --dir-files-archive='/Volumes/WDB2TB/Data/figma-scraper-archives'\
+  --dir-images-archive='/Volumes/WDB2TB/Data/figma-archives-images'\
+  --only-images
 ```

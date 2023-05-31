@@ -21,10 +21,14 @@ from colorama import Fore, Back, Style
 @click.option('--ensure-images', is_flag=True, default=False, help='Ensure images exists for files')
 @click.option('--ensure-meta', is_flag=True, default=True, help='Ensure meta exists for files')
 @click.option('--skip-images', is_flag=True, default=False, help='Skip images copy for files')
+@click.option('--only-images', is_flag=True, default=False, help='Only copy images for files')
 @click.option('--shuffle', is_flag=True, default=False, help='Shuffle the index')
-def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample, sample_all, ensure_images, ensure_meta, skip_images, shuffle):
-    # check if index is a directory
+def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample, sample_all, ensure_images, ensure_meta, skip_images, only_images, shuffle):
     index = Path(index)
+    dir_files_archive = Path(dir_files_archive)
+    dir_images_archive = Path(dir_images_archive)
+
+    # check if index is a directory
     if index.is_dir():
         index_dir = index
         index = index_dir / "index.json"
@@ -41,7 +45,6 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
         # get id, link, title
         index_data = [(obj["id"], obj["link"], obj["title"]) for obj in reader]
 
-
     # Read map file
     with open(map, 'r') as f:
         map_data = json.load(f)
@@ -53,12 +56,8 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
         # now, convert it to key-value pair with id as key
         meta_data = {obj["id"]: obj for obj in meta_data}
 
-    dir_files_archive = Path(dir_files_archive)
-    if not skip_images:
-        dir_images_archive = Path(dir_images_archive)
-        if not dir_images_archive.exists():
-            raise click.UsageError(
-                'Images archive directory does not exist')
+    if not skip_images and not dir_images_archive.exists():
+        raise click.UsageError('Images archive directory does not exist')
 
     # create root output dir
     output = Path(output)
@@ -156,6 +155,14 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
             tqdm.write(Fore.RED + f"☒ {id}/{file_key} - ERROR sampleing <{title}>")
             output_dir.exists() and shutil.rmtree(output_dir)
             raise e
+
+    # after sampling is complete
+    if only_images:
+        # if only images, remove all files under top level directories
+        for dir in tqdm(output.iterdir(), desc='🗑️', leave=True, colour='white'):
+            # meta.json, map.json, file.json are not images
+            for file in dir.glob('*.json'):
+                file.unlink()
 
 class SamplerException(Exception):
     def __init__(self, id, file, message):
