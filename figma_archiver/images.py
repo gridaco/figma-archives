@@ -155,7 +155,8 @@ def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize,
     for _ in tqdm(json_files, desc="🔥 Final Validation & Meta Sync", position=BOTTOM_POSITION, leave=True):
       key = Path(_).stem
       sync_metadata_for_exports(root_dir=root_dir, src_dir=_src_dir, key=key)
-      # sync_metadata_for_hash_images()
+      sync_metadata_for_hash_images(root_dir=root_dir, key=key)
+      tqdm.write(f"🔥 {root_dir/key}")
 
 def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, include_canvas: bool, no_fills: bool, thumbnails: bool, figma_token: str, format: str, scale: int, optimize: bool, max_mb_hash: int, depth: int, index: int, size: int, pbar: tqdm, concurrency: int, no_download: bool):
     # for key, json_file in files:
@@ -570,28 +571,37 @@ def log_error(msg, print=False):
     except Exception as e:...
 
 
-
-
 def sync_metadata_for_hash_images(root_dir, key):
     """
-    TODO: we need to save this info when initially downloaded and optimzied, otherwise we don't know the original size
-    NOT USED ATM
+    syncs the meta.json file for the hash images
     """
     path = Path(root_dir) / key / "images"
-    images = filter_graphic_files(os.listdir(path))
+    metadata: Path = path / "meta.json" # would be /:filekey/exports/meta.json
+    files = [Path(file) for file in filter_graphic_files(os.listdir(path))]
+    hashes = [file.stem for file in files]
 
-    # saves the scale factor (if optimized)
-    data = {
-        "optimization": {
-            "scale": 1,
-            "original": {
-                "size": 0, # file size
-                "width": 0, # width
-                "height": 0, # height
+    is_new = not metadata.exists()
+    # save the info file
+    with open(metadata, "w+") as f:
+        try: olddata = json.load(f) if not is_new else {} 
+        except json.JSONDecodeError: olddata = {}
+
+        images = {}
+        for hash_ in hashes:
+            # hash : file
+            file = [file for file in files if file.stem == hash_][0]
+            images[hash_] = file.name
+
+        data = {
+            **olddata,
+            # follows the figma-api format, "meta" key shall not be changed
+            "meta": {
+                "images": images
             },
-            "loss": 0.0 # percentage
         }
-    }
+
+        json.dump(data, f, separators=(',', ':'))
+        f.close()
 
 
 def sync_metadata_for_exports(root_dir, src_dir, key):
