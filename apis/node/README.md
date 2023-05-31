@@ -6,11 +6,13 @@ Figma Community API provide publicly available figma community files data, you c
 
 ```sh
 # npm
-npm install --save @figma-api/community
+npm install --save @figma-api/community axios
 
 # yarn
-yarn add @figma-api/community
+yarn add @figma-api/community axios
 ```
+
+_Note_ - `axios` is a peer dependency, you need to install it as well.
 
 ## Usage
 
