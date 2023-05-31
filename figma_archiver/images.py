@@ -25,6 +25,7 @@ import queue
 from typing import List, Tuple
 import resource
 from PIL import Image
+from datetime import datetime
 import math
 import io
 
@@ -52,13 +53,14 @@ BOTTOM_POSITION = 24
 @click.option("--max-mb-hash", help="Max mb to be applied to has images (if optimize is true)", default=1, type=click.INT)
 @click.option('--only-thumbnails', is_flag=True, default=False, help="process only thumbnails. this is usefull when thumbnail is expired & files are fresh-fetched")
 @click.option('--thumbnails', is_flag=True, default=False, help="Set this flag to download thumbnail.png as well")
+@click.option('--only-sync', is_flag=True, default=False, help="Set this flag to only sync the files without downloading or optimizing images")
 @click.option("-t", "--figma-token", help="Figma API access token.", default=os.getenv("FIGMA_ACCESS_TOKEN"), type=str)
 @click.option("-src", '--source-dir', default="./downloads/*.json", help="Path to the JSON file")
 @click.option("-c", "--concurrency", help="Number of concurrent processes.", default=cpu_count(), type=int)
 @click.option("--skip-n", help="Number of files to skip (for dubugging).", default=0, type=int)
 @click.option("--no-download", is_flag=True, help="No downloading the images (This can be used if you want this script to only run for optimizing existing images)", default=0, type=int)
 @click.option("--shuffle", is_flag=True, help="Rather if to randomize the input for even distribution", default=False, type=click.BOOL)
-def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize, max_mb_hash, thumbnails, only_thumbnails, figma_token, source_dir, concurrency, skip_n, no_download, shuffle):
+def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize, max_mb_hash, thumbnails, only_thumbnails, only_sync, figma_token, source_dir, concurrency, skip_n, no_download, shuffle):
     # progress bar position config
     global BOTTOM_POSITION
     BOTTOM_POSITION = concurrency * 2 + 5
@@ -82,7 +84,6 @@ def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize,
     if not optimize:
       max_mb_hash = 0
 
-    img_queue = queue.Queue()
     root_dir = Path(dir)
 
     _src_dir = Path('/'.join(source_dir.split("/")[0:-1]))   # e.g. ./downloads
@@ -91,6 +92,7 @@ def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize,
     json_files = json_files[skip_n:]
     file_keys = [Path(file).stem for file in json_files]
 
+
     # randomize for even distribution
     if shuffle:
       shuffled = [item for item in range(len(json_files))]
@@ -98,53 +100,62 @@ def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize,
       json_files = [json_files[i] for i in shuffled]
       file_keys = [file_keys[i] for i in shuffled]
 
+    # set up the queue and background downloader thread
+    img_queue = queue.Queue()
     # download thread
     download_thread = threading.Thread(target=image_queue_handler, args=(img_queue,))
     download_thread.start()
 
-    # main progress bar
-    pbar = tqdm(total=len(json_files), position=BOTTOM_POSITION, leave=True)
+    if not only_sync:
+      # main progress bar
+      pbar = tqdm(total=len(json_files), position=BOTTOM_POSITION, leave=True)
 
-    chunks = chunked_zips(file_keys, json_files, n=concurrency)
-    threads: list[threading.Thread] = []
+      chunks = chunked_zips(file_keys, json_files, n=concurrency)
+      threads: list[threading.Thread] = []
 
-    tqdm.write(f"🔥 {concurrency} threads / {len(figma_tokens)} identities")
+      tqdm.write(f"🔥 {concurrency} threads / {len(figma_tokens)} identities")
 
-    # run the main thread loop
-    size_avg = len(json_files) // concurrency # a accurate enough estimate for the progress bar. this is required since we cannot consume the zip iterator. - which means cannot get the size of the files inside each thread. this can be improved, but we're keeping it this way.
-    for _ in range(concurrency):
-      t = threading.Thread(target=process_files, args=(chunks[_],), kwargs={
-        'root_dir': root_dir,
-        'src_dir': _src_dir,
-        'img_queue': img_queue,
-        'include_canvas': include_canvas,
-        'no_fills': no_fills,
-        'thumbnails': thumbnails,
-        'figma_token': figma_tokens[(_ + 1) % len(figma_tokens)],
-        'format': format,
-        'scale': scale,
-        'optimize': optimize,
-        'max_mb_hash': max_mb_hash,
-        'depth': depth,
-        'size': size_avg,
-        'index': _,
-        'pbar': pbar,
-        'no_download': no_download,
-        'concurrency': concurrency
-      })
-      t.start()
-      threads.append(t)
-      # # give each thread a little time difference to prevent 429
-      # time.sleep(10)
+      # run the main thread loop
+      size_avg = len(json_files) // concurrency # a accurate enough estimate for the progress bar. this is required since we cannot consume the zip iterator. - which means cannot get the size of the files inside each thread. this can be improved, but we're keeping it this way.
+      for _ in range(concurrency):
+        t = threading.Thread(target=process_files, args=(chunks[_],), kwargs={
+          'root_dir': root_dir,
+          'src_dir': _src_dir,
+          'img_queue': img_queue,
+          'include_canvas': include_canvas,
+          'no_fills': no_fills,
+          'thumbnails': thumbnails,
+          'figma_token': figma_tokens[(_ + 1) % len(figma_tokens)],
+          'format': format,
+          'scale': scale,
+          'optimize': optimize,
+          'max_mb_hash': max_mb_hash,
+          'depth': depth,
+          'size': size_avg,
+          'index': _,
+          'pbar': pbar,
+          'no_download': no_download,
+          'concurrency': concurrency
+        })
+        t.start()
+        threads.append(t)
+        # # give each thread a little time difference to prevent 429
+        # time.sleep(10)
 
-    for t in threads:
-      t.join()
+      for t in threads:
+        t.join()
 
-    tqdm.write("All done!")
+      tqdm.write("All done!")
     # Signal the handler to stop by adding a None item
     img_queue.put(('EOD', 'EOD', None))
     # finally wait for the download thread to finish
     download_thread.join()
+
+    # validation & meta sync
+    for _ in tqdm(json_files, desc="🔥 Final Validation & Meta Sync", position=BOTTOM_POSITION, leave=True):
+      key = Path(_).stem
+      sync_metadata_for_exports(root_dir=root_dir, src_dir=_src_dir, key=key)
+      # sync_metadata_for_hash_images()
 
 def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, include_canvas: bool, no_fills: bool, thumbnails: bool, figma_token: str, format: str, scale: int, optimize: bool, max_mb_hash: int, depth: int, index: int, size: int, pbar: tqdm, concurrency: int, no_download: bool):
     # for key, json_file in files:
@@ -165,7 +176,7 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                 download_image(thumbnail_url, subdir / "thumbnail.png")
                 # tqdm.write(f"Saved thumbnail to {subdir / 'thumbnail.png'}")
 
-          node_ids = get_node_ids(
+          node_ids, depths, maxdepth = get_node_ids_and_depths(
               file_data, depth=depth, include_canvas=include_canvas)
           # ----------------------------------------------------------------------
           # image fills
@@ -559,6 +570,102 @@ def log_error(msg, print=False):
     except Exception as e:...
 
 
+
+
+def sync_metadata_for_hash_images(root_dir, key):
+    """
+    TODO: we need to save this info when initially downloaded and optimzied, otherwise we don't know the original size
+    NOT USED ATM
+    """
+    path = Path(root_dir) / key / "images"
+    images = filter_graphic_files(os.listdir(path))
+
+    # saves the scale factor (if optimized)
+    data = {
+        "optimization": {
+            "scale": 1,
+            "original": {
+                "size": 0, # file size
+                "width": 0, # width
+                "height": 0, # height
+            },
+            "loss": 0.0 # percentage
+        }
+    }
+
+
+def sync_metadata_for_exports(root_dir, src_dir, key):
+    """
+    Saves the metadata under the root directory (of the file) to indicate which images are fulfilled.
+    """
+
+    path = Path(root_dir) / key / "exports"
+    document = read_file_data(Path(src_dir) / f"{key}.json")
+    metadata = path / "meta.json" # would be /:filekey/exports/meta.json
+
+    ids, depths, maxdepth = get_node_ids_and_depths(document, depth=None, include_canvas=True) # get all ids
+    
+    # filter out only graphic files
+    exports = filter_graphic_files(os.listdir(path))
+    
+    node_exports = {}
+    for id_ in ids:
+        # init the map
+        node_exports[id_] = []
+
+    # if the file has no @nx suffix, it's the @1x file
+    for export in exports:
+        name, scale, fmt = scale_and_format_from_name(export)        
+        node_exports[name].append(f"@{scale}x.{fmt}")
+
+    # validate the resolutions
+    # "resolutions": [
+    #     # depth, scale, format
+    #     [0, 1, "png"],
+    #     [0, 2, "png"],
+    #     [1, 1, "png"],
+    #     [1, 2, "png"],
+    # ]
+    resolutions = []
+    for depth in range(maxdepth):
+        ids = [key for key, v in depths.items() if v == depth]
+        exports = [export for id_ in ids for export in node_exports[id_]]
+        scales_and_formats = [scale_and_format_from_name(export) for export in exports]
+        scales = set([s for _, s, _  in scales_and_formats])
+        formats = set([f for _, _, f  in scales_and_formats])
+        
+        for scale in scales:
+            for fmt in formats:
+                if all((f"@{scale}x.{fmt}" in node_export or f".{fmt}" in node_export) for node_export in exports):
+                    resolutions.append([depth, scale, fmt])
+    
+    # reversed_depths
+    depths_ids_map = {}
+    for k, v in depths.items():
+      depths_ids_map.setdefault(v, []).append(k)
+
+
+    data = {
+        "document": {
+            "version": document["version"],
+            "lastModified": document["lastModified"]
+        },
+        "archivedAt": datetime.now().isoformat(), # the last mod date of the meta file (a.k.a last archived)
+        "resolutions": resolutions, # the resolutions that are exported
+        "map": node_exports,
+        "depths": {
+            "min": 0,
+            "max": maxdepth,
+            **depths_ids_map
+        },
+    }
+
+    # save the info file
+    with open(metadata, "w") as f:
+        json.dump(data, f, separators=(',', ':'))
+        f.close()
+
+
 def read_file_data(file: Path):
     if file.is_file():
         try:
@@ -583,50 +690,49 @@ def read_file_data(file: Path):
         return None
 
 
-
-def get_node_ids(data, depth=None, include_canvas=False):
+def get_node_ids_and_depths(data, depth=None, include_canvas=False):
     """
-
-    In most cases, you want to set depth to 1 or None with include_canvas=False.
-
-    depth:
-     - None means no limit
-     - 0 means no nodes, retrurns only canvas ids (if include_canvas is True) otherwise empty list
-     - 1 means only canvas ids (if include_canvas is True) and direct children of canvas
-
-    ...
+    Returns a tuple of two lists:
+    1. The IDs of the nodes.
+    2. A dictionary that maps each ID to its depth in the tree.
     """
     def extract_ids_recursively(node, current_depth):
-        if depth is not None and current_depth >= depth:
-            return []
+        if depth is not None and current_depth > depth:
+            return [], {}
 
         ids = [node["id"]]
+        depth_map = {node["id"]: current_depth}
+
         if "children" in node:
             for child in node["children"]:
-                ids.extend(extract_ids_recursively(child, current_depth + 1))
-        return ids
+                child_ids, child_depth_map = extract_ids_recursively(child, current_depth + 1)
+                ids.extend(child_ids)
+                depth_map.update(child_depth_map)
+        return ids, depth_map
 
     if include_canvas:
-      return [
-          id_
-          for child in data["document"]["children"]
-          for id_ in extract_ids_recursively(child, 0)
-      ]
+        ids, depth_map = zip(*[
+            extract_ids_recursively(child, 0)
+            for child in data["document"]["children"]
+        ])
+    else:
+        ids, depth_map = zip(*[
+            extract_ids_recursively(child, 0)
+            for canvas in data["document"]["children"]
+            for child in canvas['children']
+        ])
     
-    return [
-        id_
-        for canvas in data["document"]["children"]
-        for child in canvas['children']
-        for id_ in extract_ids_recursively(child, 0)
-    ]
+    # Flatten lists and merge dictionaries
+    ids = [id_ for sublist in ids for id_ in sublist]
+    depth_map = {k: v for dict_ in depth_map for k, v in dict_.items()}
+    max_depth = max(depth_map.values())
+    
+    return ids, depth_map, max_depth
 
 
 
 def get_existing_images(images_dir):
     return set(os.listdir(images_dir))
-
-
-
 
 
 def chunked_zips(a: list, b: list, n: int) -> List[zip]:
@@ -662,6 +768,43 @@ def chunked_list(a: list, n: int) -> List[zip]:
     _a = a[start:end]
     chunks.append(_a)
     return chunks
+
+GRAPHIC_FORMATS = [
+    ".png",
+    ".jpg",
+    ".svg",
+    ".pdf",
+]
+
+def filter_graphic_files(files):
+    return [
+        file
+        for file in files
+        if any(
+            file.endswith(fmt)
+            for fmt in GRAPHIC_FORMATS
+        )
+    ]
+    
+
+def scale_and_format_from_name(name):
+    """
+    returns the scale and format from the name of the file.
+    """
+    name, fmt = name.split(".")
+    fmt = fmt.lower()
+
+    if "@" in name:
+        name, scale = name.split("@")
+        scale = float(scale.replace("x", ""))
+        # if scale is n.0 return (int) n
+        if scale.is_integer():
+            scale = int(scale)
+    else:
+        scale = 1
+
+    return name, scale, fmt
+    
 
 
 
