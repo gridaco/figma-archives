@@ -30,7 +30,6 @@ import math
 import io
 
 
-
 resource.setrlimit(
     resource.RLIMIT_CORE,
     (resource.RLIM_INFINITY, resource.RLIM_INFINITY))
@@ -40,6 +39,7 @@ load_dotenv()
 
 API_BASE_URL = "https://api.figma.com/v1"
 BOTTOM_POSITION = 24
+
 
 @click.command()
 @click.option("-v", "--version", default=0, type=click.INT, help="Version number to specify cache - update for new versions")
@@ -67,22 +67,24 @@ def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize,
 
     if only_thumbnails:
         if thumbnails:
-            tqdm.write('Thumbnails only option passed. Ignoring other fills or export related options.')
-            no_fills = True # skip image fills
-            depth = 0 # skip exports
+            tqdm.write(
+                'Thumbnails only option passed. Ignoring other fills or export related options.')
+            no_fills = True  # skip image fills
+            depth = 0  # skip exports
         else:
             # error out
-            click.echo("Error: --only-thumbnails option requires --thumbnails option to be set as well")
+            click.echo(
+                "Error: --only-thumbnails option requires --thumbnails option to be set as well")
             return
 
     # figma token
     if figma_token.startswith("[") and figma_token.endswith("]"):
-      figma_tokens = json.loads(figma_token)
+        figma_tokens = json.loads(figma_token)
     else:
-      figma_tokens = [figma_token]
+        figma_tokens = [figma_token]
 
     if not optimize:
-      max_mb_hash = 0
+        max_mb_hash = 0
 
     root_dir = Path(dir)
 
@@ -92,60 +94,62 @@ def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize,
     json_files = json_files[skip_n:]
     file_keys = [Path(file).stem for file in json_files]
 
-
     # randomize for even distribution
     if shuffle:
-      shuffled = [item for item in range(len(json_files))]
-      random.shuffle(shuffled)
-      json_files = [json_files[i] for i in shuffled]
-      file_keys = [file_keys[i] for i in shuffled]
+        shuffled = [item for item in range(len(json_files))]
+        random.shuffle(shuffled)
+        json_files = [json_files[i] for i in shuffled]
+        file_keys = [file_keys[i] for i in shuffled]
 
     # set up the queue and background downloader thread
     img_queue = queue.Queue()
     # download thread
-    download_thread = threading.Thread(target=image_queue_handler, args=(img_queue,))
+    download_thread = threading.Thread(
+        target=image_queue_handler, args=(img_queue,))
     download_thread.start()
 
     if not only_sync:
-      # main progress bar
-      pbar = tqdm(total=len(json_files), position=BOTTOM_POSITION, leave=True)
+        # main progress bar
+        pbar = tqdm(total=len(json_files),
+                    position=BOTTOM_POSITION, leave=True)
 
-      chunks = chunked_zips(file_keys, json_files, n=concurrency)
-      threads: list[threading.Thread] = []
+        chunks = chunked_zips(file_keys, json_files, n=concurrency)
+        threads: list[threading.Thread] = []
 
-      tqdm.write(f"🔥 {concurrency} threads / {len(figma_tokens)} identities")
+        tqdm.write(f"🔥 {concurrency} threads / {len(figma_tokens)} identities")
 
-      # run the main thread loop
-      size_avg = len(json_files) // concurrency # a accurate enough estimate for the progress bar. this is required since we cannot consume the zip iterator. - which means cannot get the size of the files inside each thread. this can be improved, but we're keeping it this way.
-      for _ in range(concurrency):
-        t = threading.Thread(target=process_files, args=(chunks[_],), kwargs={
-          'root_dir': root_dir,
-          'src_dir': _src_dir,
-          'img_queue': img_queue,
-          'include_canvas': include_canvas,
-          'no_fills': no_fills,
-          'thumbnails': thumbnails,
-          'figma_token': figma_tokens[(_ + 1) % len(figma_tokens)],
-          'format': format,
-          'scale': scale,
-          'optimize': optimize,
-          'max_mb_hash': max_mb_hash,
-          'depth': depth,
-          'size': size_avg,
-          'index': _,
-          'pbar': pbar,
-          'no_download': no_download,
-          'concurrency': concurrency
-        })
-        t.start()
-        threads.append(t)
-        # # give each thread a little time difference to prevent 429
-        # time.sleep(10)
+        # run the main thread loop
+        # a accurate enough estimate for the progress bar. this is required since we cannot consume the zip iterator. - which means cannot get the size of the files inside each thread. this can be improved, but we're keeping it this way.
+        size_avg = len(json_files) // concurrency
+        for _ in range(concurrency):
+            t = threading.Thread(target=process_files, args=(chunks[_],), kwargs={
+                'root_dir': root_dir,
+                'src_dir': _src_dir,
+                'img_queue': img_queue,
+                'include_canvas': include_canvas,
+                'no_fills': no_fills,
+                'thumbnails': thumbnails,
+                'figma_token': figma_tokens[(_ + 1) % len(figma_tokens)],
+                'format': format,
+                'scale': scale,
+                'optimize': optimize,
+                'max_mb_hash': max_mb_hash,
+                'depth': depth,
+                'size': size_avg,
+                'index': _,
+                'pbar': pbar,
+                'no_download': no_download,
+                'concurrency': concurrency
+            })
+            t.start()
+            threads.append(t)
+            # # give each thread a little time difference to prevent 429
+            # time.sleep(10)
 
-      for t in threads:
-        t.join()
+        for t in threads:
+            t.join()
 
-      tqdm.write("All done!")
+        tqdm.write("All done!")
     # Signal the handler to stop by adding a None item
     img_queue.put(('EOD', 'EOD', None))
     # finally wait for the download thread to finish
@@ -153,10 +157,12 @@ def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize,
 
     # validation & meta sync
     for _ in tqdm(json_files, desc="🔥 Final Validation & Meta Sync", position=BOTTOM_POSITION, leave=True):
-      key = Path(_).stem
-      sync_metadata_for_exports(root_dir=root_dir, src_dir=_src_dir, key=key)
-      sync_metadata_for_hash_images(root_dir=root_dir, src_dir=_src_dir, key=key)
-      tqdm.write(f"🔥 {root_dir/key}")
+        key = Path(_).stem
+        sync_metadata_for_exports(root_dir=root_dir, src_dir=_src_dir, key=key)
+        sync_metadata_for_hash_images(
+            root_dir=root_dir, src_dir=_src_dir, key=key)
+        tqdm.write(f"🔥 {root_dir/key}")
+
 
 def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, include_canvas: bool, no_fills: bool, thumbnails: bool, figma_token: str, format: str, scale: int, optimize: bool, max_mb_hash: int, depth: int, index: int, size: int, pbar: tqdm, concurrency: int, no_download: bool):
     # for key, json_file in files:
@@ -168,85 +174,88 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
         file_data = read_file_data(json_file)
 
         if file_data:
-          if depth is not None:
-              depth = int(depth)
-          if thumbnails:
-              # fetch and save thumbnail (if not already downloaded)
-              if not (subdir / "thumbnail.png").is_file() and not no_download:
-                thumbnail_url = file_data["thumbnailUrl"]
-                download_image(thumbnail_url, subdir / "thumbnail.png")
-                # tqdm.write(f"Saved thumbnail to {subdir / 'thumbnail.png'}")
+            if depth is not None:
+                depth = int(depth)
+            if thumbnails:
+                # fetch and save thumbnail (if not already downloaded)
+                if not (subdir / "thumbnail.png").is_file() and not no_download:
+                    thumbnail_url = file_data["thumbnailUrl"]
+                    download_image(thumbnail_url, subdir / "thumbnail.png")
+                    # tqdm.write(f"Saved thumbnail to {subdir / 'thumbnail.png'}")
 
-          node_ids, depths, maxdepth = get_node_ids_and_depths(
-              file_data, depth=depth, include_canvas=include_canvas)
-          # ----------------------------------------------------------------------
-          # image fills
-          if not no_fills:
-            images_dir = subdir / "images"
+            node_ids, depths, maxdepth = get_node_ids_and_depths(
+                file_data, depth=depth, include_canvas=include_canvas)
+            # ----------------------------------------------------------------------
+            # image fills
+            if not no_fills:
+                images_dir = subdir / "images"
+                images_dir.mkdir(parents=True, exist_ok=True)
+                existing_images = os.listdir(images_dir)
+
+                # TODO: this is not safe. the image fills still can be not complete if we terminate during the download
+                # Fetch and save image fills (B)
+                if len(existing_images) == 0 and not no_download:
+                    # tqdm.write("Fetching image fills...")
+                    image_fills = fetch_file_images(key, token=figma_token)
+                    url_and_path_pairs = [
+                        (url, os.path.join(images_dir, f"{hash_}.{format}"))
+                        for hash_, url in image_fills.items()
+                    ]
+
+                    # we don't use queue for has images
+                    fetch_and_save_image_fills(
+                        url_and_path_pairs, max_mb=max_mb_hash)
+                    # for pair in url_and_path_pairs:
+                    #   img_queue.put(pair + (max_mb_hash,))
+                else:
+                    # tqdm.write(f"{images_dir} - Image fills already fetched")
+                    ...
+                    if optimize:
+                        for image in existing_images:
+                            file = images_dir / image
+                            success, saved = optimize_image(
+                                file, max_mb=max_mb_hash)
+                            if success:
+                                tqdm.write(
+                                    f"☑ {fixstr(f'(existing) Saved {(saved / 1024 / 1024):.2f}MB')}... → {file}")
+
+            # ----------------------------------------------------------------------
+            # exports
+            images_dir = subdir / "exports"
             images_dir.mkdir(parents=True, exist_ok=True)
             existing_images = os.listdir(images_dir)
 
-            # TODO: this is not safe. the image fills still can be not complete if we terminate during the download
-            # Fetch and save image fills (B)
-            if len(existing_images) == 0 and not no_download:
-                # tqdm.write("Fetching image fills...")
-                image_fills = fetch_file_images(key, token=figma_token)
+            # Fetch and save layer images (A)
+            node_ids_to_fetch = [
+                node_id
+                for node_id in node_ids
+                if f"{node_id}.{format}" not in existing_images
+                and f"{node_id}@{scale}x.{format}" not in existing_images
+            ]
+
+            if node_ids_to_fetch and not no_download:
+                # tqdm.write(f"Fetching {len(node_ids_to_fetch)} of {len(node_ids)} layer images...")
+                layer_images = fetch_node_images(
+                    key, node_ids_to_fetch, scale, format, token=figma_token, position=BOTTOM_POSITION-((concurrency*2)+index), conncurrency=concurrency)
                 url_and_path_pairs = [
-                    (url, os.path.join(images_dir, f"{hash_}.{format}"))
-                    for hash_, url in image_fills.items()
+                    (
+                        url,
+                        os.path.join(
+                            images_dir,
+                            f"{node_id}{'@' + str(scale) + 'x' if scale != '1' else ''}.{format}",
+                        ),
+                    )
+                    for node_id, url in layer_images.items()
                 ]
-
-                # we don't use queue for has images
-                fetch_and_save_image_fills(url_and_path_pairs, max_mb=max_mb_hash)
-                # for pair in url_and_path_pairs:
-                #   img_queue.put(pair + (max_mb_hash,))
+                for pair in url_and_path_pairs:
+                    img_queue.put(pair + (None,))
             else:
-                # tqdm.write(f"{images_dir} - Image fills already fetched")
+                # tqdm.write(f"{images_dir} - Layer images already fetched")
                 ...
-                if optimize:
-                    for image in existing_images:
-                        file = images_dir / image
-                        success, saved = optimize_image(file, max_mb=max_mb_hash)                
-                        if success:
-                            tqdm.write(f"☑ {fixstr(f'(existing) Saved {(saved / 1024 / 1024):.2f}MB')}... → {file}")
 
-          # ----------------------------------------------------------------------
-          # exports
-          images_dir = subdir / "exports"
-          images_dir.mkdir(parents=True, exist_ok=True)
-          existing_images = os.listdir(images_dir)
-
-          # Fetch and save layer images (A)
-          node_ids_to_fetch = [
-              node_id
-              for node_id in node_ids
-              if f"{node_id}.{format}" not in existing_images
-              and f"{node_id}@{scale}x.{format}" not in existing_images
-          ]
-
-          if node_ids_to_fetch and not no_download:
-              # tqdm.write(f"Fetching {len(node_ids_to_fetch)} of {len(node_ids)} layer images...")
-              layer_images = fetch_node_images(
-                  key, node_ids_to_fetch, scale, format, token=figma_token, position=BOTTOM_POSITION-((concurrency*2)+index), conncurrency=concurrency)
-              url_and_path_pairs = [
-                  (
-                      url,
-                      os.path.join(
-                          images_dir,
-                          f"{node_id}{'@' + str(scale) + 'x' if scale != '1' else ''}.{format}",
-                      ),
-                  )
-                  for node_id, url in layer_images.items()
-              ]
-              for pair in url_and_path_pairs:
-                  img_queue.put(pair + (None,))
-          else:
-              # tqdm.write(f"{images_dir} - Layer images already fetched")
-              ...
-
-          tqdm.write(f"☑ {subdir}")
+            tqdm.write(f"☑ {subdir}")
         else:
-          tqdm.write(f"☒ {subdir}")
+            tqdm.write(f"☒ {subdir}")
         pbar.update(1)
 
 
@@ -268,9 +277,9 @@ def requests_retry_session(
     return session
 
 
-
 @backoff.on_exception(
-    backoff.expo, (requests.exceptions.RequestException, SSLError), max_tries=5,
+    backoff.expo, (requests.exceptions.RequestException,
+                   SSLError), max_tries=5,
     logger=logging.getLogger('backoff').addHandler(logging.StreamHandler())
 )
 def download_image(url, output_path, max_mb=None, timeout=10):
@@ -287,7 +296,8 @@ def download_image(url, output_path, max_mb=None, timeout=10):
         if max_mb is not None and max_mb > 0:
             success, saved = optimize_image(output_path, max_mb=max_mb)
             if (success):
-                tqdm.write(f"☑ {fixstr(f'Optimized - saved {(saved / 1024 / 1024):.2f}MB')}... → {output_path}")
+                tqdm.write(
+                    f"☑ {fixstr(f'Optimized - saved {(saved / 1024 / 1024):.2f}MB')}... → {output_path}")
         return url, output_path
     # check if 403 Forbidden
     except requests.exceptions.HTTPError as e:
@@ -307,9 +317,10 @@ def download_image_with_progress_bar(item, progress):
     download_image(url, path, max_mb=max_mb)
     progress.update(1)
 
+
 def image_queue_handler(img_queue: queue.Queue, batch=64, timeout=3600):
     emojis = ['📭', '📬', '📫']
-    
+
     total = 0
     while True:
         items_to_process = []
@@ -317,19 +328,20 @@ def image_queue_handler(img_queue: queue.Queue, batch=64, timeout=3600):
         timeout_time = batch_start_time + timeout
         url = None
 
-        progress = tqdm(total=batch, desc=f"📭 ({total}/{total+img_queue.qsize()})", position=BOTTOM_POSITION-2, leave=False)
+        progress = tqdm(
+            total=batch, desc=f"📭 ({total}/{total+img_queue.qsize()})", position=BOTTOM_POSITION-2, leave=False)
 
         while len(items_to_process) < batch:
             try:
                 url, path, max_mb = img_queue.get(timeout=1)
                 if url == 'EOD':  # Check for sentinel value ('EOD', 'EOD')
                     break
-                
+
                 if url is not None:
-                  items_to_process.append((url, path, max_mb))
-                  total += 1
-                  progress.desc = f"📭 ({total}/{len(items_to_process)}/{batch}/{total}/{total+img_queue.qsize()})"
-                  batch_start_time = time.time()  # Update the batch start time
+                    items_to_process.append((url, path, max_mb))
+                    total += 1
+                    progress.desc = f"📭 ({total}/{len(items_to_process)}/{batch}/{total}/{total+img_queue.qsize()})"
+                    batch_start_time = time.time()  # Update the batch start time
             except queue.Empty:
                 if time.time() > timeout_time:
                     tqdm.write("⏰ Image Archiving Timed Out")
@@ -344,10 +356,11 @@ def image_queue_handler(img_queue: queue.Queue, batch=64, timeout=3600):
 
         if not items_to_process:
             break
-        
+
         progress.desc = f"{random.choice(emojis)}"
         with ThreadPoolExecutor(max_workers=batch) as executor:
-            download_func = partial(download_image_with_progress_bar, progress=progress)
+            download_func = partial(
+                download_image_with_progress_bar, progress=progress)
             executor.map(download_func, items_to_process)
 
         time.sleep(0.1)
@@ -355,12 +368,15 @@ def image_queue_handler(img_queue: queue.Queue, batch=64, timeout=3600):
 
     tqdm.write("✅ Image Archiving Complete")
 
+
 def fetch_and_save_image_fills(url_and_path_pairs, max_mb=1, position=5, num_threads=64):
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
-        futures = {executor.submit(download_image, url, path, max_mb): (url, path) for url, path in url_and_path_pairs}
+        futures = {executor.submit(download_image, url, path, max_mb): (
+            url, path) for url, path in url_and_path_pairs}
 
         if position is not None:
-            futures = tqdm(as_completed(futures), total=len(futures), desc=f"Downloading images (Utilizing {num_threads} threads)", position=position, leave=False)
+            futures = tqdm(as_completed(futures), total=len(
+                futures), desc=f"Downloading images (Utilizing {num_threads} threads)", position=position, leave=False)
         else:
             futures = as_completed(futures)
 
@@ -372,6 +388,7 @@ def fetch_and_save_image_fills(url_and_path_pairs, max_mb=1, position=5, num_thr
                     optimize_image(downloaded_path, max_mb=max_mb)
             else:
                 tqdm.write(f"Failed to download image: {url}")
+
 
 def fixstr(str, n=64):
     """
@@ -385,6 +402,8 @@ def fixstr(str, n=64):
 
 
 mb = 1024 * 1024
+
+
 def optimize_image(path, max_mb=1):
     margin = 0.3
     try:
@@ -431,17 +450,17 @@ def fetch_file_images(file_key, token):
     url = f"{API_BASE_URL}/files/{file_key}/images"
     headers = {"X-FIGMA-TOKEN": token}
     try:
-      response = requests.get(url, headers=headers)
-      data = response.json()
+        response = requests.get(url, headers=headers)
+        data = response.json()
     except requests.exceptions.ConnectionError as e:
         return {}
 
     if "error" in data and data["error"]:
         raise ValueError("Error fetching image fills")
     try:
-      return data["meta"]["images"]
+        return data["meta"]["images"]
     except KeyError:
-      return {}
+        return {}
 
 
 def fetch_node_images(file_key, ids, scale, format, token, position, conncurrency):
@@ -474,11 +493,9 @@ def fetch_node_images(file_key, ids, scale, format, token, position, conncurrenc
             chunk.append(id_)
         yield chunk
 
-
-    max_retry = 5
+    max_retry = 5 * conncurrency
     delay_between_429 = 5
     ids_chunks = list(chunk(ids))
-
 
     def fetch_images_chunk(chunk, retry=0):
         params["ids"] = ",".join(chunk)
@@ -493,8 +510,10 @@ def fetch_node_images(file_key, ids, scale, format, token, position, conncurrenc
 
         if response.status_code == 429:
             if retry >= max_retry:
-                log_error(f"Error fetching [{(','.join(chunk))}] layer images. Rate limit exceeded.")
-                tqdm.write(f"☒ HTTP429 - Rate limit exceeded. ({max_retry} tries)")
+                log_error(
+                    f"Error fetching [{(','.join(chunk))}] layer images. Rate limit exceeded.")
+                tqdm.write(
+                    f"☒ HTTP429 - Rate limit exceeded. ({max_retry} tries)")
                 return {}
 
             # check if retry-after header is present
@@ -503,17 +522,17 @@ def fetch_node_images(file_key, ids, scale, format, token, position, conncurrenc
                 retry_after) if retry_after else delay_between_429 * (retry + 1) * conncurrency
 
             if max_retry - retry < 2:
-              # only show the last retry message
-              tqdm.write(
-                  f"☒ HTTP429 - Waiting {retry_after} seconds before retrying...  ({retry + 1}/{max_retry})")
+                # only show the last retry message
+                tqdm.write(
+                    f"☒ HTTP429 - Waiting {retry_after} seconds before retrying...  ({retry + 1}/{max_retry})")
             time.sleep(retry_after)
             return fetch_images_chunk(chunk, retry=retry + 1)
 
         try:
-          data = response.json()
+            data = response.json()
         except requests.exceptions.JSONDecodeError as e:
-          return {}
-        
+            return {}
+
         if "err" in data and data["err"]:
             # ignore and report error
             msg = f"Error fetching {len(chunk)} layer images [{','.join(chunk)}], e:{data['err']}"
@@ -522,7 +541,6 @@ def fetch_node_images(file_key, ids, scale, format, token, position, conncurrenc
         return data["images"]
 
     max_concurrent_requests = conncurrency
-    delay_between_batches = 1
     num_batches = -(-len(ids_chunks) // max_concurrent_requests)
     batch_chunks = chunked_list(ids_chunks, num_batches)
 
@@ -533,13 +551,15 @@ def fetch_node_images(file_key, ids, scale, format, token, position, conncurrenc
     with tqdm(range(num_batches), desc=f"{random.choice(emojis)} ({len(ids)}/{len(ids_chunks)}/{num_batches})", position=position, leave=False, mininterval=1) as pbar:
         for batch_idx in pbar:
             for _chunk in batch_chunks[batch_idx]:
-              image_urls.update(fetch_images_chunk(chunk=_chunk))
+                pbar.set_description(
+                    f"{random.choice(emojis)} {batch_idx + 1 + 1}/{num_batches}: Fetching...")
+                image_urls.update(fetch_images_chunk(chunk=_chunk))
 
             if batch_idx < num_batches - 1:
-                wait = delay_between_batches * batch_idx
+                delay_between_batches = 3
                 pbar.set_description(
-                    f"{random.choice(emojis)} {batch_idx + 1 + 1}/{num_batches}: Waiting {wait} seconds before next batch...")
-                time.sleep(wait)
+                    f"{random.choice(emojis)} {batch_idx + 1 + 1}/{num_batches}: Waiting {delay_between_batches} seconds before next batch...")
+                time.sleep(delay_between_batches)
 
     return image_urls
 
@@ -555,20 +575,21 @@ def calculate_program():
 
 def log_error(msg, print=False):
     try:
-      if print:
-          tqdm.write(msg)
+        if print:
+            tqdm.write(msg)
 
-      # check if err log file exists
-      err_log_file = Path("err.log")
-      if not err_log_file.exists():
-          with open(err_log_file, "w") as f:
-              f.write("")
-              f.close()
-      
-      with open(err_log_file, "a") as f:
-          f.write(msg + "\n")
-          f.close()
-    except Exception as e:...
+        # check if err log file exists
+        err_log_file = Path("err.log")
+        if not err_log_file.exists():
+            with open(err_log_file, "w") as f:
+                f.write("")
+                f.close()
+
+        with open(err_log_file, "a") as f:
+            f.write(msg + "\n")
+            f.close()
+    except Exception as e:
+        ...
 
 
 def save_optimization_info(root_dir, key, image, optimization):
@@ -576,12 +597,14 @@ def save_optimization_info(root_dir, key, image, optimization):
     TODO:
     """
     path = Path(root_dir) / key / "images"
-    metadata = path / "meta.json" # would be /:filekey/exports/meta.json
+    metadata = path / "meta.json"  # would be /:filekey/exports/meta.json
     is_new = not metadata.exists()
     # read the metadata
     with open(metadata, "w+") as f:
-        try: olddata = json.load(f) if not is_new else {} 
-        except json.JSONDecodeError: olddata = {}
+        try:
+            olddata = json.load(f) if not is_new else {}
+        except json.JSONDecodeError:
+            olddata = {}
 
         data = {
             **olddata,
@@ -609,15 +632,17 @@ def sync_metadata_for_hash_images(root_dir, src_dir, key):
     """
     path = Path(root_dir) / key / "images"
     document = read_file_data(Path(src_dir) / f"{key}.json")
-    metadata: Path = path / "meta.json" # would be /:filekey/exports/meta.json
+    metadata: Path = path / "meta.json"  # would be /:filekey/exports/meta.json
     files = [Path(file) for file in filter_graphic_files(os.listdir(path))]
     hashes = [file.stem for file in files]
 
     is_new = not metadata.exists()
     # save the info file
     with open(metadata, "w+") as f:
-        try: olddata = json.load(f) if not is_new else {} 
-        except json.JSONDecodeError: olddata = {}
+        try:
+            olddata = json.load(f) if not is_new else {}
+        except json.JSONDecodeError:
+            olddata = {}
 
         images = {}
         for hash_ in hashes:
@@ -632,7 +657,8 @@ def sync_metadata_for_hash_images(root_dir, src_dir, key):
                 "version": document["version"],
                 "lastModified": document["lastModified"]
             },
-            "archivedAt": datetime.now().isoformat(), # the last mod date of the meta file (a.k.a last archived)
+            # the last mod date of the meta file (a.k.a last archived)
+            "archivedAt": datetime.now().isoformat(),
             "meta": {
                 "images": images
             },
@@ -649,13 +675,14 @@ def sync_metadata_for_exports(root_dir, src_dir, key):
 
     path = Path(root_dir) / key / "exports"
     document = read_file_data(Path(src_dir) / f"{key}.json")
-    metadata = path / "meta.json" # would be /:filekey/exports/meta.json
+    metadata = path / "meta.json"  # would be /:filekey/exports/meta.json
 
-    ids, depths, maxdepth = get_node_ids_and_depths(document, depth=None, include_canvas=True) # get all ids
-    
+    ids, depths, maxdepth = get_node_ids_and_depths(
+        document, depth=None, include_canvas=True)  # get all ids
+
     # filter out only graphic files
     exports = filter_graphic_files(os.listdir(path))
-    
+
     node_exports = {}
     for id_ in ids:
         # init the map
@@ -663,7 +690,7 @@ def sync_metadata_for_exports(root_dir, src_dir, key):
 
     # if the file has no @nx suffix, it's the @1x file
     for export in exports:
-        name, scale, fmt = scale_and_format_from_name(export)        
+        name, scale, fmt = scale_and_format_from_name(export)
         node_exports[name].append(f"@{scale}x.{fmt}")
 
     # validate the resolutions
@@ -678,29 +705,30 @@ def sync_metadata_for_exports(root_dir, src_dir, key):
     for depth in range(maxdepth):
         ids = [key for key, v in depths.items() if v == depth]
         exports = [export for id_ in ids for export in node_exports[id_]]
-        scales_and_formats = [scale_and_format_from_name(export) for export in exports]
-        scales = set([s for _, s, _  in scales_and_formats])
-        formats = set([f for _, _, f  in scales_and_formats])
-        
+        scales_and_formats = [scale_and_format_from_name(
+            export) for export in exports]
+        scales = set([s for _, s, _ in scales_and_formats])
+        formats = set([f for _, _, f in scales_and_formats])
+
         for scale in scales:
             for fmt in formats:
                 if all((f"@{scale}x.{fmt}" in node_export or f".{fmt}" in node_export) for node_export in exports):
                     resolutions.append([depth, scale, fmt])
-    
+
     # reversed_depths
     depths_ids_map = {}
     for k, v in depths.items():
-      # the depth to be saved follows the format from figma api, where it starts from 1, not 0, where 1 is page (canvas), 2 being top level nodes.
-      depths_ids_map.setdefault(v + 1, []).append(k)
-
+        # the depth to be saved follows the format from figma api, where it starts from 1, not 0, where 1 is page (canvas), 2 being top level nodes.
+        depths_ids_map.setdefault(v + 1, []).append(k)
 
     data = {
         "document": {
             "version": document["version"],
             "lastModified": document["lastModified"]
         },
-        "archivedAt": datetime.now().isoformat(), # the last mod date of the meta file (a.k.a last archived)
-        "resolutions": resolutions, # the resolutions that are exported
+        # the last mod date of the meta file (a.k.a last archived)
+        "archivedAt": datetime.now().isoformat(),
+        "resolutions": resolutions,  # the resolutions that are exported
         "map": node_exports,
         "depths": {
             "min": 1,
@@ -718,22 +746,24 @@ def sync_metadata_for_exports(root_dir, src_dir, key):
 def read_file_data(file: Path):
     if file.is_file():
         try:
-          with open(file, "r") as file:
-            file_data = json.load(file)
-            return file_data
-        except json.decoder.JSONDecodeError as e:
-          log_error(f"Error loading {file} Skipping... (Malformed JSON file)) - error: {e.msg} {e.args}")
-
-          # read the json file and print the start and end of it for debugging
-          try:
             with open(file, "r") as file:
-                  txt = file.read()
-                  _first_few = txt[0: 100]
-                  _last_few = txt[-100:]
-                  tqdm.write(f"First few characters: \n{_first_few}")
-                  tqdm.write(f"Last few characters: \n{_last_few}")
-          except TypeError as e: ...
-          return None
+                file_data = json.load(file)
+                return file_data
+        except json.decoder.JSONDecodeError as e:
+            log_error(
+                f"Error loading {file} Skipping... (Malformed JSON file)) - error: {e.msg} {e.args}")
+
+            # read the json file and print the start and end of it for debugging
+            try:
+                with open(file, "r") as file:
+                    txt = file.read()
+                    _first_few = txt[0: 100]
+                    _last_few = txt[-100:]
+                    tqdm.write(f"First few characters: \n{_first_few}")
+                    tqdm.write(f"Last few characters: \n{_last_few}")
+            except TypeError as e:
+                ...
+            return None
     else:
         tqdm.write(f"File {file} not found")
         return None
@@ -754,7 +784,8 @@ def get_node_ids_and_depths(data, depth=None, include_canvas=False):
 
         if "children" in node:
             for child in node["children"]:
-                child_ids, child_depth_map = extract_ids_recursively(child, current_depth + 1)
+                child_ids, child_depth_map = extract_ids_recursively(
+                    child, current_depth + 1)
                 ids.extend(child_ids)
                 depth_map.update(child_depth_map)
         return ids, depth_map
@@ -770,14 +801,13 @@ def get_node_ids_and_depths(data, depth=None, include_canvas=False):
             for canvas in data["document"]["children"]
             for child in canvas['children']
         ])
-    
+
     # Flatten lists and merge dictionaries
     ids = [id_ for sublist in ids for id_ in sublist]
     depth_map = {k: v for dict_ in depth_map for k, v in dict_.items()}
     max_depth = max(depth_map.values())
-    
-    return ids, depth_map, max_depth
 
+    return ids, depth_map, max_depth
 
 
 def get_existing_images(images_dir):
@@ -802,6 +832,7 @@ def chunked_zips(a: list, b: list, n: int) -> List[zip]:
     zips.append(zip(_a, _b))
     return zips
 
+
 def chunked_list(a: list, n: int) -> List[zip]:
     listsize = len(a)
     perlist = listsize // n
@@ -818,12 +849,14 @@ def chunked_list(a: list, n: int) -> List[zip]:
     chunks.append(_a)
     return chunks
 
+
 GRAPHIC_FORMATS = [
     ".png",
     ".jpg",
     ".svg",
     ".pdf",
 ]
+
 
 def filter_graphic_files(files):
     return [
@@ -834,7 +867,7 @@ def filter_graphic_files(files):
             for fmt in GRAPHIC_FORMATS
         )
     ]
-    
+
 
 def scale_and_format_from_name(name):
     """
@@ -853,8 +886,6 @@ def scale_and_format_from_name(name):
         scale = 1
 
     return name, scale, fmt
-    
-
 
 
 # main
