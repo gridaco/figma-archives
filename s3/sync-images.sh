@@ -8,8 +8,9 @@ fi
 
 aws s3 sync $1 $2 \
   --exclude '*' \
+  --exclude 'map.json' \
+  --exclude 'file.json' \
+  --exclude 'data.json' \
+  --exclude 'meta.json' \
   --include '*/images/**' \
-  --include '*/exports/**' \
-  --exclude '*/map.json' \
-  --exclude '*/file.json' \
-  --exclude '*/meta.json'
+  --include '*/exports/**'
