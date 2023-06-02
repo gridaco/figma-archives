@@ -7,13 +7,17 @@
     "API",
     "Data set"
   ],
-  "version": "0.0.0",
+  "version": "0.0.1",
   "private": false,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "license": "MIT",
   "homepage": "https://github.com/gridaco/figma-archives/tree/main/apis/node",
   "repository": "https://github.com/gridaco/figma-archives",
+  "exports": {
+    ".": "./",
+    "./fs": "./dist/fs.js"
+  },
   "scripts": {
     "clean": "rm -rf dist",
     "build": "tsup",
@@ -23,6 +27,7 @@
   "devDependencies": {
     "@design-sdk/figma-remote-types": "^0.0.43",
     "@types/jest": "^29.5.2",
+    "@types/mime-types": "^2.1.1",
     "@types/node": "^20.2.5",
     "axios": "^1.4.0",
     "jest": "^29.5.0",
@@ -40,5 +45,8 @@
   ],
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "mime-types": "^2.1.35"
   }
 }
