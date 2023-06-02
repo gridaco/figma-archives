@@ -318,14 +318,12 @@ def download_image_with_progress_bar(item, progress):
     progress.update(1)
 
 
-def image_queue_handler(img_queue: queue.Queue, batch=64, timeout=3600):
+def image_queue_handler(img_queue: queue.Queue, batch=64):
     emojis = ['📭', '📬', '📫']
 
     total = 0
     while True:
         items_to_process = []
-        batch_start_time = time.time()
-        timeout_time = batch_start_time + timeout
         url = None
 
         progress = tqdm(
@@ -341,14 +339,8 @@ def image_queue_handler(img_queue: queue.Queue, batch=64, timeout=3600):
                     items_to_process.append((url, path, max_mb))
                     total += 1
                     progress.desc = f"📭 ({total}/{len(items_to_process)}/{batch}/{total}/{total+img_queue.qsize()})"
-                    batch_start_time = time.time()  # Update the batch start time
             except queue.Empty:
-                if time.time() > timeout_time:
-                    tqdm.write("⏰ Image Archiving Timed Out")
-                    break
-
-        if time.time() > timeout_time:
-            break
+                ...
 
         if url == 'EOD':  # Break the outer loop if sentinel value is encountered
             tqdm.write("⏰ sentinel value encountered")
