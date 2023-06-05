@@ -1,17 +1,20 @@
 import json
-from pathlib import Path
+import os
 import random
 import re
+import sys
+import threading
+import warnings
+from pathlib import Path
+
 import click
 from tqdm import tqdm
-import os
-import sys
 
 # for easily importing utils
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, current_dir)
 
-from utils import is_text_not_empty, visit, flatten, extract_text
+from stats_util import extract_text, flatten, is_text_not_empty, visit
 
 
 @click.command()
@@ -39,13 +42,16 @@ def main(samples, max, shuffle):
     for directory in tqdm(directories, desc='Indexing..', leave=False):
         # get the text layers' json file
         json_path = directory / 'file.json'
-        with open(json_path, 'r') as data:
-            data = json.load(data)
-        document = data['document']
-        toplayers = flatten([canvas['children']
-                             for canvas in document['children']])
-
-        root_elements[directory.name] = toplayers
+        try:
+            with open(json_path, 'r') as file:
+                data = json.load(file)
+                # print(json.dumps(data, indent=4))
+            document = data['document']
+            toplayers = [child for canvas in document['children'] for child in canvas['children']]
+            root_elements[directory.name] = toplayers
+        except FileNotFoundError as e:
+            print(f"Error: {e}. Skipping directory {directory}")
+    print('PRINT:----Indexing done!-------')
 
     artifects_dir = Path('artifacts')
     artifects_dir.mkdir(exist_ok=True)
@@ -53,33 +59,52 @@ def main(samples, max, shuffle):
     # output the text layers' text content into one file
     with open(artifects_dir / 'texts.txt', 'w') as f:
         for id in tqdm(ids, desc="Text Layers"):
-            texts = extract_text(root_elements[id])
-            for text in texts:
-                f.write(text + '\n')
+            try:
+                texts = extract_text(root_elements[id])
+                for text in texts:
+                    f.write(text + '\n')
+            except Exception as e:
+                print(f"Error processing id {id}: {e}")
+                continue
         f.close()
+    print('PRINT:Texts extracted!')
 
     # output the layers' name content into one file
-    with open(artifects_dir / 'layer-names.txt', 'w') as f:
+    with open(artifects_dir / 'layer-names.txt', 'a') as f:
         for id in tqdm(ids, desc="Layer Names"):
-            for layer in visit(root_elements[id], skip_types=['TEXT']):
-                is_text_not_empty(layer['name']) and f.write(
-                    layer['name'].strip() + '\n')
+            try:
+                for layer in visit(root_elements[id], skip_types=['TEXT']):
+                    if is_text_not_empty(layer['name']):
+                        f.write(layer['name'].strip() + '\n')
+            except KeyError as e:
+                print(f"Error processing id {id}: key {e} not found")
+                continue
         f.close()
+    print('PRINT:Layer names extracted!')
 
-    with open(artifects_dir / 'layer-names-top.txt', 'w') as f:
+    with open(artifects_dir / 'layer-names-top.txt', 'a') as f:
         for id in tqdm(ids, desc="Top Layer Names"):
-            for layer in visit(root_elements[id], skip_types=['TEXT'], max=0):
-                is_text_not_empty(layer['name']) and f.write(
-                    layer['name'].strip() + '\n')
+            try:
+                for layer in visit(root_elements[id], skip_types=['TEXT'], max=0):
+                    if is_text_not_empty(layer['name']):
+                        f.write(layer['name'].strip() + '\n')
+            except KeyError as e:
+                print(f"Error processing id {id}: key {e} not found")
+                continue
         f.close()
+    print('Top layer names extracted!')
 
-    with open(artifects_dir / 'layer-names-top-frames.txt', 'w') as f:
+    with open(artifects_dir / 'layer-names-top-frames.txt', 'a') as f:
         for id in tqdm(ids, desc="Top Layer Names"):
-            for layer in visit(root_elements[id], visit_types=["FRAME"], max=0):
-                is_text_not_empty(layer['name']) and f.write(
-                    layer['name'].strip() + '\n')
+            try:
+                for layer in visit(root_elements[id], visit_types=["FRAME"], max=0):
+                    if is_text_not_empty(layer['name']):
+                        f.write(layer['name'].strip() + '\n')
+            except KeyError as e:
+                print(f"Error processing id {id}: key {e} not found")
+                continue
         f.close()
-
+    print('Top layer frames names extracted!')
 
 
 if __name__ == '__main__':
