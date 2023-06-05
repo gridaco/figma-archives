@@ -632,7 +632,10 @@ def sync_metadata_for_hash_images(root_dir, src_dir, key):
     """
     syncs the meta.json file for the hash images
     """
-    path = Path(root_dir) / key / "images"
+    path: Path = Path(root_dir) / key / "images"
+    if not path.exists():
+        return
+
     document = read_file_data(Path(src_dir) / f"{key}.json")
     metadata: Path = path / "meta.json"  # would be /:filekey/exports/meta.json
     try:
