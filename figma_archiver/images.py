@@ -52,6 +52,7 @@ BOTTOM_POSITION = 24
 @click.option("--optimize", is_flag=True, help="Optimize images size (Now only applied to hash images)", default=False, type=click.BOOL)
 @click.option("--max-mb-hash", help="Max mb to be applied to has images (if optimize is true)", default=1, type=click.INT)
 @click.option('--only-thumbnails', is_flag=True, default=False, help="process only thumbnails. this is usefull when thumbnail is expired & files are fresh-fetched")
+@click.option('--types', default=None, help="specify the type of node to be fetched", type=click.STRING)
 @click.option('--thumbnails', is_flag=True, default=False, help="Set this flag to download thumbnail.png as well")
 @click.option('--only-sync', is_flag=True, default=False, help="Set this flag to only sync the files without downloading or optimizing images")
 @click.option("-t", "--figma-token", help="Figma API access token.", default=os.getenv("FIGMA_ACCESS_TOKEN"), type=str)
@@ -60,7 +61,7 @@ BOTTOM_POSITION = 24
 @click.option("--skip-n", help="Number of files to skip (for dubugging).", default=0, type=int)
 @click.option("--no-download", is_flag=True, help="No downloading the images (This can be used if you want this script to only run for optimizing existing images)", default=0, type=int)
 @click.option("--shuffle", is_flag=True, help="Rather if to randomize the input for even distribution", default=False, type=click.BOOL)
-def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize, max_mb_hash, thumbnails, only_thumbnails, only_sync, figma_token, source_dir, concurrency, skip_n, no_download, shuffle):
+def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize, max_mb_hash, types, thumbnails, only_thumbnails, only_sync, figma_token, source_dir, concurrency, skip_n, no_download, shuffle):
     # progress bar position config
     global BOTTOM_POSITION
     BOTTOM_POSITION = concurrency * 2 + 5
@@ -76,6 +77,13 @@ def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize,
             click.echo(
                 "Error: --only-thumbnails option requires --thumbnails option to be set as well")
             return
+
+    if types is not None:
+        # split and trim
+        types = [
+            type.strip() for type in
+            types.split(",")
+        ]
 
     # figma token
     if figma_token.startswith("[") and figma_token.endswith("]"):
@@ -129,6 +137,7 @@ def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize,
                 'include_canvas': include_canvas,
                 'no_fills': no_fills,
                 'thumbnails': thumbnails,
+                'types': types,
                 'figma_token': figma_tokens[(_ + 1) % len(figma_tokens)],
                 'format': format,
                 'scale': scale,
@@ -164,7 +173,7 @@ def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize,
         tqdm.write(f"🔥 {root_dir/key}")
 
 
-def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, include_canvas: bool, no_fills: bool, thumbnails: bool, figma_token: str, format: str, scale: int, optimize: bool, max_mb_hash: int, depth: int, index: int, size: int, pbar: tqdm, concurrency: int, no_download: bool):
+def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, include_canvas: bool, no_fills: bool, thumbnails: bool, types: list[str], figma_token: str, format: str, scale: int, optimize: bool, max_mb_hash: int, depth: int, index: int, size: int, pbar: tqdm, concurrency: int, no_download: bool):
     # for key, json_file in files:
     for key, json_file in tqdm(files, desc=f"⚡️ {figma_token[:8]}", position=BOTTOM_POSITION-(index+4), leave=True, total=size):
         subdir: Path = root_dir / key
@@ -184,7 +193,7 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                     # tqdm.write(f"Saved thumbnail to {subdir / 'thumbnail.png'}")
 
             node_ids, depths, maxdepth = get_node_ids_and_depths(
-                file_data, depth=depth, include_canvas=include_canvas)
+                file_data, depth=depth, include_canvas=include_canvas, types=types)
             # ----------------------------------------------------------------------
             # image fills
             if not no_fills:
@@ -488,6 +497,7 @@ def fetch_node_images(file_key, ids, scale, format, token, position, conncurrenc
     max_retry = 5 * conncurrency
     delay_between_429 = 5
     ids_chunks = list(chunk(ids))
+    size = len(ids)
 
     def fetch_images_chunk(chunk, retry=0):
         params["ids"] = ",".join(chunk)
@@ -544,7 +554,7 @@ def fetch_node_images(file_key, ids, scale, format, token, position, conncurrenc
         for batch_idx in pbar:
             for _chunk in batch_chunks[batch_idx]:
                 pbar.set_description(
-                    f"{random.choice(emojis)} {batch_idx + 1 + 1}/{num_batches}: Fetching...")
+                    f"{random.choice(emojis)} {batch_idx + 1 + 1}/{num_batches}: Fetching... ({size})")
                 image_urls.update(fetch_images_chunk(chunk=_chunk))
 
             if batch_idx < num_batches - 1:
@@ -761,18 +771,25 @@ def read_file_data(file: Path):
         return None
 
 
-def get_node_ids_and_depths(data, depth=None, include_canvas=False):
+def get_node_ids_and_depths(data, depth=None, include_canvas=False, types=None):
     """
-    Returns a tuple of two lists:
+    Returns a tuple of three lists:
     1. The IDs of the nodes.
     2. A dictionary that maps each ID to its depth in the tree.
+    3. The maximum depth among all nodes.
+
+    If `types` are specified, only nodes of those types are returned. Defaults to all types (None).
     """
     def extract_ids_recursively(node, current_depth):
         if depth is not None and current_depth > depth:
             return [], {}
 
-        ids = [node["id"]]
-        depth_map = {node["id"]: current_depth}
+        ids = []
+        depth_map = {}
+
+        if types is None or node["type"] in types:
+            ids.append(node["id"])
+            depth_map[node["id"]] = current_depth
 
         if "children" in node:
             for child in node["children"]:
@@ -780,6 +797,7 @@ def get_node_ids_and_depths(data, depth=None, include_canvas=False):
                     child, current_depth + 1)
                 ids.extend(child_ids)
                 depth_map.update(child_depth_map)
+
         return ids, depth_map
 
     if include_canvas:
@@ -797,7 +815,10 @@ def get_node_ids_and_depths(data, depth=None, include_canvas=False):
     # Flatten lists and merge dictionaries
     ids = [id_ for sublist in ids for id_ in sublist]
     depth_map = {k: v for dict_ in depth_map for k, v in dict_.items()}
-    max_depth = max(depth_map.values())
+    try:
+        max_depth = max(depth_map.values())
+    except ValueError:
+        max_depth = 0
 
     return ids, depth_map, max_depth
 
