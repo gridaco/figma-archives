@@ -1,3 +1,4 @@
+import os
 import random
 from urllib.parse import urlparse
 import gzip
@@ -28,11 +29,15 @@ logging.basicConfig(filename='error-files.log', level=logging.ERROR)
 @click.option('--skip-images', is_flag=True, default=False, help='Skip images copy for files')
 @click.option('--only-images', is_flag=True, default=False, help='Only copy images for files')
 @click.option('--shuffle', is_flag=True, default=False, help='Shuffle the index')
-def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample, sample_all, no_compress, ensure_images, ensure_meta, skip_images, only_images, shuffle):
+@click.option('--link', is_flag=True, default=False, help='Use symbolic link instead of copy')
+def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample, sample_all, no_compress, ensure_images, ensure_meta, skip_images, only_images, shuffle, link):
     index = Path(index)
     dir_files_archive = Path(dir_files_archive)
     dir_images_archive = Path(
         dir_images_archive) if dir_images_archive is not None else None
+
+    do_files = not only_images
+    do_images = not skip_images
 
     # check if index is a directory
     if index.is_dir():
@@ -71,12 +76,16 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
 
     tqdm.write(f"📂 {output}")
 
-    # locate the already-sampled files with finding map.json files
-    # get the ids of the already-sampled files
-    completes = [x.parent.name for x in output.glob('**/map.json')]
-    # if file.json exists, but map.json does not, it means the file is malformed
-    malforms = [x.parent.name for x in output.glob(
-        '**/file.json*') if not (x.parent / 'map.json').exists()]
+    if only_images:
+        completes = []
+        malforms = []
+    else:
+        # locate the already-sampled files with finding map.json files
+        # get the ids of the already-sampled files
+        completes = [x.parent.name for x in output.glob('**/map.json')]
+        # if file.json exists, but map.json does not, it means the file is malformed
+        malforms = [x.parent.name for x in output.glob(
+            '**/file.json*') if not (x.parent / 'map.json').exists()]
 
     tqdm.write(
         f"📂 {output} already contains {len(completes)} samples (will be skipped), {len(malforms)} malformed samples (will be replaced)")
@@ -118,45 +127,52 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
             target = output_dir / "file.json" if no_compress else output_dir / "file.json.gz"
 
             # Copy file.json (compress if needed)
-            try:
-                copy_and_compress(origin, target, no_compress)
-            except FileNotFoundError as e:
-                shutil.rmtree(output_dir)
-                raise SamplerException(
-                    id, file_key, f"File not found for sample <{title}>")
+            if do_files:
+                try:
+                    copy_and_compress(origin, target, no_compress)
+                except FileNotFoundError as e:
+                    shutil.rmtree(output_dir)
+                    raise SamplerException(
+                        id, file_key, f"File not found for sample <{title}>")
+
+            if do_files:
+                # Write meta.json
+                with open(output_dir / "meta.json", "w") as f:
+                    try:
+                        meta = meta_data[id]
+                        json.dump(meta, f)
+                    except KeyError:
+                        if ensure_meta:
+                            raise OkException(
+                                id, file_key, f"Meta not found for sample <{title}>")
+                        else:
+                            continue
+
+            if do_files:
+                # Write map.json
+                with open(output_dir / "map.json", "w") as f:
+                    json.dump({"latest": meta_data[id]["version"], "versions": {
+                              meta_data[id]["version"]: file_key}}, f)
 
             # Copy images
-            if not skip_images:
+            if do_images:
                 images_archive_dir = dir_images_archive / file_key
                 if images_archive_dir.exists():
                     # copy items under images_archive_dir to output_dir/images (files and directories)
                     # shutil.copytree(images_archive_dir, output_dir / "images") - this copies the directory itself
                     for item in images_archive_dir.iterdir():
-                        if item.is_file():
-                            shutil.copy(item, output_dir / item.name)
-                        elif item.is_dir():
-                            shutil.copytree(item, output_dir / item.name)
+                        if link:
+                            # create a symlink
+                            os.symlink(item, output_dir / item.name)
+                        else:
+                            if item.is_file():
+                                shutil.copy(item, output_dir / item.name)
+                            elif item.is_dir():
+                                shutil.copytree(item, output_dir / item.name)
                 else:
                     if ensure_images:
                         raise OkException(
                             id, file_key, f"Images not found for sample <{title}>")
-
-            # Write meta.json
-            with open(output_dir / "meta.json", "w") as f:
-                try:
-                    meta = meta_data[id]
-                    json.dump(meta, f)
-                except KeyError:
-                    if ensure_meta:
-                        raise OkException(
-                            id, file_key, f"Meta not found for sample <{title}>")
-                    else:
-                        continue
-
-            # Write map.json
-            with open(output_dir / "map.json", "w") as f:
-                json.dump({"latest": meta_data[id]["version"], "versions": {
-                          meta_data[id]["version"]: file_key}}, f)
 
             tqdm.write(
                 Fore.WHITE + f"☑ {id} → {output_dir} ({file_key} / {title})")
@@ -176,7 +192,7 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
             output_dir.exists() and shutil.rmtree(output_dir)
             raise e
 
-    # after sampling is complete
+    # ensure after sampling is complete
     if only_images:
         # if only images, remove all files under top level directories
         for dir in tqdm(output.iterdir(), desc='🗑️', leave=True, colour='white'):
