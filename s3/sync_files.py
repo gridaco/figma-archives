@@ -2,11 +2,43 @@ import os
 import glob
 import click
 import boto3
+import logging
 from pathlib import Path
 from tqdm import tqdm
 from botocore.exceptions import NoCredentialsError
+from concurrent.futures import ThreadPoolExecutor
 
 s3 = boto3.client('s3')
+
+# Maximum number of concurrent uploads
+MAX_WORKERS = 10
+
+# Setup logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+handler = logging.FileHandler('failed-files.log')
+handler.setLevel(logging.INFO)
+logger.addHandler(handler)
+
+
+def upload_file(filepath, local_folder, bucket):
+    with open(filepath, 'rb') as data:
+        # Create the key by removing the local_folder prefix from the filepath
+        key = os.path.relpath(filepath, local_folder)
+        try:
+            if filepath.endswith('.json.gz'):
+                s3.upload_fileobj(data, bucket, key,
+                                  ExtraArgs={'ContentType': 'application/json', 'ContentEncoding': 'gzip'})
+            elif filepath.endswith('.json'):
+                s3.upload_fileobj(data, bucket, key,
+                                  ExtraArgs={'ContentType': 'application/json'})
+            else:
+                # skip
+                return f'☐ Skipping - {filepath} is not a json or json.gz file'
+        except FileNotFoundError:
+            logger.error(filepath)  # Log the failed file
+            return f'☒ FileNotFoundError - {filepath} was not found'
+        return f'☑ {filepath} ➡ s3://{bucket}/{key}'
 
 
 @click.command()
@@ -18,8 +50,7 @@ def sync_files(local_folder, bucket, pattern):
     local_folder = os.path.join(local_folder, "")
     local_pattern = local_folder + '**/' + pattern
     # Generate a list of files to upload
-    files = [f for f in glob.glob(
-        local_pattern, recursive=True)]
+    files = [f for f in glob.glob(local_pattern, recursive=True)]
 
     if len(files) == 0:
         click.echo(
@@ -41,30 +72,15 @@ def sync_files(local_folder, bucket, pattern):
         click.echo("No AWS credentials found.")
         return
 
-    with tqdm(total=len(files)) as pbar:
-        for filepath in files:
-            with open(filepath, 'rb') as data:
-                # Create the key by removing the local_folder prefix from the filepath
-                key = os.path.relpath(filepath, local_folder)
-                try:
-                    if filepath.endswith('.json.gz'):
-                        s3.upload_fileobj(data, bucket, key,
-                                          ExtraArgs={'ContentType': 'application/json', 'ContentEncoding': 'gzip'})
-                    elif filepath.endswith('.json'):
-                        s3.upload_fileobj(data, bucket, key,
-                                          ExtraArgs={'ContentType': 'application/json'})
-                    else:
-                        # skip
-                        tqdm.write(
-                            f'☐ Skipping - {filepath} is not a json or json.gz file')
-                        continue
-                    pbar.update()
-                except FileNotFoundError:
-                    tqdm.write(
-                        f'☒ FileNotFoundError - {filepath} was not found')
-                    continue
-                tqdm.write(
-                    f'☑ {filepath} ➡ s3://{bucket}/{key}')
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        with tqdm(total=len(files)) as pbar:
+            futures = {executor.submit(
+                upload_file, filepath, local_folder, bucket): filepath for filepath in files}
+            for future in futures:
+                pbar.update()
+                result = future.result()
+                if result:
+                    tqdm.write(result)
 
 
 if __name__ == "__main__":
