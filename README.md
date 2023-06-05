@@ -10,7 +10,24 @@ Figma Files Scraper for Research &amp; Studies
 
 _Demo of step 2 ~ 4 running concurrently_
 
-## Usage
+## Access - Access the official Archive
+
+With NodeJS Client - [`@figma-api/community`](https://npmjs.com/package/@figma-api/community)
+
+```ts
+import { Client } from "@figma-api/community";
+
+const client = Client();
+
+// a file id is a id from figma.com/community/file/:id
+// e.g. - https://www.figma.com/community/file/1035203688168086460
+const fileid = "1035203688168086460";
+
+// fetch file
+const { data: document } = await client.file(fileid);
+```
+
+## Usage - Run this archiver
 
 This scraper is a combination of
 
