@@ -48,7 +48,7 @@ BOTTOM_POSITION = 24
 @click.option("-s", '--scale', default="1", help="Image scale")
 @click.option("-d", '--depth',  default=None, help="Layer depth to go recursively", type=click.INT)
 @click.option('--include-canvas',  default=False, help="Includes the canvas while exporting images (False by default)")
-@click.option('--no-fills',  default=False, help="Skips the download for Image fills")
+@click.option('--no-fills', is_flag=True, default=False, help="Skips the download for Image fills")
 @click.option("--optimize", is_flag=True, help="Optimize images size (Now only applied to hash images)", default=False, type=click.BOOL)
 @click.option("--max-mb-hash", help="Max mb to be applied to has images (if optimize is true)", default=1, type=click.INT)
 @click.option('--only-thumbnails', is_flag=True, default=False, help="process only thumbnails. this is usefull when thumbnail is expired & files are fresh-fetched")
