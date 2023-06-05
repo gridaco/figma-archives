@@ -554,7 +554,7 @@ def fetch_node_images(file_key, ids, scale, format, token, position, conncurrenc
         for batch_idx in pbar:
             for _chunk in batch_chunks[batch_idx]:
                 pbar.set_description(
-                    f"{random.choice(emojis)} {batch_idx + 1 + 1}/{num_batches}: Fetching... ({size})")
+                    f"{random.choice(emojis)} {batch_idx + 1}/{num_batches}: Fetching... ({size})")
                 image_urls.update(fetch_images_chunk(chunk=_chunk))
 
             if batch_idx < num_batches - 1:
