@@ -64,7 +64,7 @@ python3 sampler.py\
   --index='../data/latest'\
   --output='/Volumes/WDB2TB/Data/figma-archives'\
   --dir-files-archive='/Volumes/WDB2TB/Data/figma-scraper-archives'\
-  --dir-images-archive='/Volumes/WDB2TB/Data/figma-scraper-image-archives'\
+  --dir-images-archive='/Volumes/WDB2TB/Data/figma-scraper-image-archives'
 
 # sampling only images
 python3 sampler.py\

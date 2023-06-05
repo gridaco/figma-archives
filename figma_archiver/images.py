@@ -632,10 +632,16 @@ def sync_metadata_for_hash_images(root_dir, src_dir, key):
     """
     syncs the meta.json file for the hash images
     """
-    path = Path(root_dir) / key / "images"
+    path: Path = Path(root_dir) / key / "images"
+    if not path.exists():
+        return
+
     document = read_file_data(Path(src_dir) / f"{key}.json")
     metadata: Path = path / "meta.json"  # would be /:filekey/exports/meta.json
-    files = [Path(file) for file in filter_graphic_files(os.listdir(path))]
+    try:
+        files = [Path(file) for file in filter_graphic_files(os.listdir(path))]
+    except FileNotFoundError:
+        files = []
     hashes = [file.stem for file in files]
 
     is_new = not metadata.exists()
@@ -675,7 +681,10 @@ def sync_metadata_for_exports(root_dir, src_dir, key):
     Saves the metadata under the root directory (of the file) to indicate which images are fulfilled.
     """
 
-    path = Path(root_dir) / key / "exports"
+    path: Path = Path(root_dir) / key / "exports"
+    if not path.exists():
+        return
+
     document = read_file_data(Path(src_dir) / f"{key}.json")
     metadata = path / "meta.json"  # would be /:filekey/exports/meta.json
 
@@ -683,7 +692,10 @@ def sync_metadata_for_exports(root_dir, src_dir, key):
         document, depth=None, include_canvas=True)  # get all ids
 
     # filter out only graphic files
-    exports = filter_graphic_files(os.listdir(path))
+    try:
+        exports = filter_graphic_files(os.listdir(path))
+    except FileNotFoundError:
+        exports = []
 
     node_exports = {}
     for id_ in ids:
@@ -799,32 +811,37 @@ def get_node_ids_and_depths(data, depth=None, include_canvas=False, types=None):
                 depth_map.update(child_depth_map)
 
         return ids, depth_map
-
-    if include_canvas:
-        ids, depth_map = zip(*[
-            extract_ids_recursively(child, 0)
-            for child in data["document"]["children"]
-        ])
-    else:
-        ids, depth_map = zip(*[
-            extract_ids_recursively(child, 0)
-            for canvas in data["document"]["children"]
-            for child in canvas['children']
-        ])
-
-    # Flatten lists and merge dictionaries
-    ids = [id_ for sublist in ids for id_ in sublist]
-    depth_map = {k: v for dict_ in depth_map for k, v in dict_.items()}
     try:
-        max_depth = max(depth_map.values())
-    except ValueError:
-        max_depth = 0
+        if include_canvas:
+            ids, depth_map = zip(*[
+                extract_ids_recursively(child, 0)
+                for child in data["document"]["children"]
+            ])
+        else:
+            ids, depth_map = zip(*[
+                extract_ids_recursively(child, 0)
+                for canvas in data["document"]["children"]
+                for child in canvas['children']
+            ])
 
-    return ids, depth_map, max_depth
+        # Flatten lists and merge dictionaries
+        ids = [id_ for sublist in ids for id_ in sublist]
+        depth_map = {k: v for dict_ in depth_map for k, v in dict_.items()}
+        try:
+            max_depth = max(depth_map.values())
+        except ValueError:
+            max_depth = 0
+
+        return ids, depth_map, max_depth
+    except ValueError:
+        return [], {}, 0
 
 
 def get_existing_images(images_dir):
-    return set(os.listdir(images_dir))
+    try:
+        return set(os.listdir(images_dir))
+    except FileNotFoundError:
+        return set()
 
 
 def chunked_zips(a: list, b: list, n: int) -> List[zip]:
