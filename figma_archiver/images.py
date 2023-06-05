@@ -637,6 +637,9 @@ def sync_metadata_for_hash_images(root_dir, src_dir, key):
         return
 
     document = read_file_data(Path(src_dir) / f"{key}.json")
+    if not document:
+        return
+    
     metadata: Path = path / "meta.json"  # would be /:filekey/exports/meta.json
     try:
         files = [Path(file) for file in filter_graphic_files(os.listdir(path))]
@@ -686,6 +689,9 @@ def sync_metadata_for_exports(root_dir, src_dir, key):
         return
 
     document = read_file_data(Path(src_dir) / f"{key}.json")
+    if not document:
+        return
+    
     metadata = path / "meta.json"  # would be /:filekey/exports/meta.json
 
     ids, depths, maxdepth = get_node_ids_and_depths(
