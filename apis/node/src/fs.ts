@@ -4,7 +4,7 @@ import path from "path";
 import mime from "mime-types";
 import type { AxiosResponse, AxiosRequestHeaders } from "axios";
 import type { ClientInterface } from "./types";
-import { fileImageFills, fileImages } from "./fmt";
+import { fileImageFills, fileImages, getFileNodes } from "./q";
 
 const _mock_axios_request = async <T = any>(
   path: string
@@ -70,13 +70,14 @@ export const Client = ({
       // params not supported atm
       clients.file.get(`/${fileId}/file.json.gz`),
 
-    // fileNodes: (fileId, params) =>
-    //   clients.file.get(`files/${fileId}/nodes`, {
-    //     params: {
-    //       ...params,
-    //       ids: params.ids.join(","),
-    //     },
-    //   }),
+    fileNodes: async (fileId, params) => {
+      const res = await clients.file.get(`/${fileId}/file.json.gz`);
+      const data = getFileNodes(res.data, params);
+      return {
+        ...res,
+        data,
+      };
+    },
 
     fileImages: async (fileId, params) => {
       const res = await clients.image.get(`/${fileId}/exports/meta.json`);

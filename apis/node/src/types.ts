@@ -67,19 +67,19 @@ export interface ClientInterface {
     params?: FileParams
   ) => AxiosPromise<Figma.FileResponse>;
 
-  // /**
-  //  * Returns the nodes referenced to by :ids as a JSON object.
-  //  * The nodes are retrieved from the Figma file referenced to by :key.
-  //  * The node Id and file key can be parsed from any Figma node url:
-  //  * https://www.figma.com/file/:key/:title?node-id=:id.
-  //  * @param {fileId} String File to export JSON from
-  //  * @param {params} FileNodesParams
-  //  * @see https://www.figma.com/developers/api#get-file-nodes-endpoint
-  //  */
-  // readonly fileNodes: (
-  //   fileId: string,
-  //   params: FileNodesParams
-  // ) => AxiosPromise<Figma.FileNodesResponse>;
+  /**
+   * Returns the nodes referenced to by :ids as a JSON object.
+   * The nodes are retrieved from the Figma file referenced to by :key.
+   * The node Id and file key can be parsed from any Figma node url:
+   * https://www.figma.com/file/:key/:title?node-id=:id.
+   * @param {fileId} String File to export JSON from
+   * @param {params} FileNodesParams
+   * @see https://www.figma.com/developers/api#get-file-nodes-endpoint
+   */
+  readonly fileNodes: (
+    fileId: string,
+    params: FileNodesParams
+  ) => AxiosPromise<Figma.FileNodesResponse>;
 
   /**
    * If no error occurs, "images" will be populated with a map from

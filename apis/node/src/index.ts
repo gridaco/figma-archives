@@ -1,7 +1,7 @@
 import Axios from "axios";
 import * as k from "./k";
 import type { ClientInterface } from "./types";
-import { fileImageFills, fileImages } from "./fmt";
+import { fileImageFills, fileImages, getFileNodes } from "./q";
 
 export const Client = (): ClientInterface => {
   const clients = {
@@ -17,21 +17,16 @@ export const Client = (): ClientInterface => {
     meta: (fileId) => clients.file.get(`/${fileId}/meta.json`),
     file: (fileId, params = {}) =>
       // params not supported atm
-      // {
-      //   params: {
-      //     ...params,
-      //     ids: params.ids ? params.ids.join(",") : "",
-      //   },
-      // }
       clients.file.get(`/${fileId}/file.json.gz`),
 
-    // fileNodes: (fileId, params) =>
-    //   clients.file.get(`files/${fileId}/nodes`, {
-    //     params: {
-    //       ...params,
-    //       ids: params.ids.join(","),
-    //     },
-    //   }),
+    fileNodes: async (fileId, params) => {
+      const res = await clients.file.get(`/${fileId}/file.json.gz`);
+      const data = getFileNodes(res.data, params);
+      return {
+        ...res,
+        data,
+      };
+    },
 
     fileImages: async (fileId, params) => {
       const res = await clients.image.get(`/${fileId}/exports/meta.json`);
