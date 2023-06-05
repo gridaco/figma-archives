@@ -25,6 +25,11 @@ handler.setLevel(logging.INFO)
 logger.addHandler(handler)
 
 
+DEFAULT_HEADERS = {
+    'Cache-Control': 'public, max-age=2592000',
+}
+
+
 class UploadWorker(threading.Thread):
     def __init__(self, upload_queue, local_folder, bucket, pbar):
         threading.Thread.__init__(self)
@@ -48,10 +53,10 @@ class UploadWorker(threading.Thread):
             try:
                 if filepath.endswith('.json.gz'):
                     s3.upload_fileobj(data, self.bucket, key,
-                                      ExtraArgs={'ContentType': 'application/json', 'ContentEncoding': 'gzip'})
+                                      ExtraArgs={'ContentType': 'application/json', 'ContentEncoding': 'gzip', **DEFAULT_HEADERS})
                 elif filepath.endswith('.json'):
                     s3.upload_fileobj(data, self.bucket, key,
-                                      ExtraArgs={'ContentType': 'application/json'})
+                                      ExtraArgs={'ContentType': 'application/json', **DEFAULT_HEADERS})
                 else:
                     # skip
                     self.pbar.update()

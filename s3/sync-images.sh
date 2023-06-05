@@ -13,4 +13,5 @@ aws s3 sync $1 $2 \
   --exclude 'data.json' \
   --exclude 'meta.json' \
   --include '*/images/**' \
-  --include '*/exports/**'
+  --include '*/exports/**' \
+  --cache-control 'public, max-age=2592000'

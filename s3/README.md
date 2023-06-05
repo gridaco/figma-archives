@@ -17,3 +17,15 @@ source sync-files.sh /Volumes/Data/DB/figma-samples s3://figma-community-files
 # example - for syncing images only (ignore files)
 source sync-images.sh /Volumes/Data/DB/figma-samples s3://figma-community-images
 ```
+
+## Notes & Guidelines
+
+### Headers
+
+- DO set `Cache-Control` to `public, max-age=2592000` (30 days, at least) for all files
+- DO set `Content-Type` to `application/json` for all json files (even for .json.gz)
+- DO set `Content-Encoding` to `gzip` for all .json.gz files
+
+### Compression
+
+- DO compress all json files larger than 5mb with gzip, .json.gz
