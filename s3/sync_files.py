@@ -3,15 +3,12 @@ import glob
 import click
 import boto3
 import logging
-from pathlib import Path
+import queue
+import threading
 from tqdm import tqdm
 from botocore.exceptions import NoCredentialsError
-from concurrent.futures import ThreadPoolExecutor
 
 s3 = boto3.client('s3')
-
-# Maximum number of concurrent uploads
-MAX_WORKERS = 10
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -21,31 +18,48 @@ handler.setLevel(logging.INFO)
 logger.addHandler(handler)
 
 
-def upload_file(filepath, local_folder, bucket):
-    with open(filepath, 'rb') as data:
-        # Create the key by removing the local_folder prefix from the filepath
-        key = os.path.relpath(filepath, local_folder)
-        try:
-            if filepath.endswith('.json.gz'):
-                s3.upload_fileobj(data, bucket, key,
-                                  ExtraArgs={'ContentType': 'application/json', 'ContentEncoding': 'gzip'})
-            elif filepath.endswith('.json'):
-                s3.upload_fileobj(data, bucket, key,
-                                  ExtraArgs={'ContentType': 'application/json'})
-            else:
-                # skip
-                return f'☐ Skipping - {filepath} is not a json or json.gz file'
-        except FileNotFoundError:
-            logger.error(filepath)  # Log the failed file
-            return f'☒ FileNotFoundError - {filepath} was not found'
-        return f'☑ {filepath} ➡ s3://{bucket}/{key}'
+class UploadWorker(threading.Thread):
+    def __init__(self, upload_queue, local_folder, bucket, pbar):
+        threading.Thread.__init__(self)
+        self.upload_queue = upload_queue
+        self.local_folder = local_folder
+        self.bucket = bucket
+        self.pbar = pbar
+
+    def run(self):
+        while True:
+            filepath = self.upload_queue.get()
+            if filepath is None:
+                break
+            self.upload_file(filepath)
+            self.upload_queue.task_done()
+
+    def upload_file(self, filepath):
+        with open(filepath, 'rb') as data:
+            # Create the key by removing the local_folder prefix from the filepath
+            key = os.path.relpath(filepath, self.local_folder)
+            try:
+                if filepath.endswith('.json.gz'):
+                    s3.upload_fileobj(data, self.bucket, key,
+                                      ExtraArgs={'ContentType': 'application/json', 'ContentEncoding': 'gzip'})
+                elif filepath.endswith('.json'):
+                    s3.upload_fileobj(data, self.bucket, key,
+                                      ExtraArgs={'ContentType': 'application/json'})
+                else:
+                    # skip
+                    self.pbar.update()
+                    return
+            except FileNotFoundError:
+                logger.info(filepath)  # Log the failed file
+            self.pbar.update()
 
 
 @click.command()
 @click.argument('local_folder', type=click.Path(exists=True, file_okay=False))
 @click.argument('bucket', type=str)
 @click.option('--pattern', default='*.json*', help='The pattern of files to match.')
-def sync_files(local_folder, bucket, pattern):
+@click.option('-c', '--concurrency', default=64, help='The number of worker threads to use.')
+def sync_files(local_folder, bucket, pattern, concurrency):
     # Normalize local_folder to ensure it ends with '/'
     local_folder = os.path.join(local_folder, "")
     local_pattern = local_folder + '**/' + pattern
@@ -72,15 +86,25 @@ def sync_files(local_folder, bucket, pattern):
         click.echo("No AWS credentials found.")
         return
 
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        with tqdm(total=len(files)) as pbar:
-            futures = {executor.submit(
-                upload_file, filepath, local_folder, bucket): filepath for filepath in files}
-            for future in futures:
-                pbar.update()
-                result = future.result()
-                if result:
-                    tqdm.write(result)
+    upload_queue = queue.Queue()
+
+    with tqdm(total=len(files)) as pbar:
+        # Start worker threads
+        workers = []
+        for _ in range(concurrency):
+            worker = UploadWorker(upload_queue, local_folder, bucket, pbar)
+            worker.start()
+            workers.append(worker)
+        # Enqueue files to upload
+        for filepath in files:
+            upload_queue.put(filepath)
+        # Block until all tasks are done
+        upload_queue.join()
+        # Stop worker threads
+        for _ in range(concurrency):
+            upload_queue.put(None)
+        for worker in workers:
+            worker.join()
 
 
 if __name__ == "__main__":
