@@ -8,6 +8,9 @@ import click
 from tqdm import tqdm
 import jsonlines
 from colorama import Fore
+import logging
+
+logging.basicConfig(filename='error-files.log', level=logging.ERROR)
 
 
 @click.command()
@@ -160,12 +163,16 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
         except OkException as e:
             tqdm.write(
                 Fore.YELLOW + f'☒ {e.id} → {output_dir} WARNING ({e.file}) - {e.message}')
+            logging.warning(
+                f'☒ {e.id} → {output_dir} ({e.file}) - {e.message}')
         except SamplerException as e:
             tqdm.write(Fore.RED + f"☒ {e.id}/{file_key} - {e.message}")
+            logging.error(f"☒ {e.id}/{file_key} - {e.message}")
             output_dir.exists() and shutil.rmtree(output_dir)
         except Exception as e:
             tqdm.write(
                 Fore.RED + f"☒ {id}/{file_key} - ERROR sampleing <{title}>")
+            logging.error(f"☒ {id}/{file_key} - ERROR sampleing <{title}>")
             output_dir.exists() and shutil.rmtree(output_dir)
             raise e
 
@@ -173,8 +180,8 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
     if only_images:
         # if only images, remove all files under top level directories
         for dir in tqdm(output.iterdir(), desc='🗑️', leave=True, colour='white'):
-            # meta.json, map.json, file.json are not images
-            for file in dir.glob('*.json'):
+            # meta.json, map.json, file.json (or file.json.gz) are not images
+            for file in dir.glob('*.json?(.gz)'):
                 file.unlink()
 
 
