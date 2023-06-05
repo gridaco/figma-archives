@@ -635,7 +635,10 @@ def sync_metadata_for_hash_images(root_dir, src_dir, key):
     path = Path(root_dir) / key / "images"
     document = read_file_data(Path(src_dir) / f"{key}.json")
     metadata: Path = path / "meta.json"  # would be /:filekey/exports/meta.json
-    files = [Path(file) for file in filter_graphic_files(os.listdir(path))]
+    try:
+        files = [Path(file) for file in filter_graphic_files(os.listdir(path))]
+    except FileNotFoundError:
+        files = []
     hashes = [file.stem for file in files]
 
     is_new = not metadata.exists()
@@ -683,7 +686,10 @@ def sync_metadata_for_exports(root_dir, src_dir, key):
         document, depth=None, include_canvas=True)  # get all ids
 
     # filter out only graphic files
-    exports = filter_graphic_files(os.listdir(path))
+    try:
+        exports = filter_graphic_files(os.listdir(path))
+    except FileNotFoundError:
+        exports = []
 
     node_exports = {}
     for id_ in ids:
@@ -824,7 +830,10 @@ def get_node_ids_and_depths(data, depth=None, include_canvas=False, types=None):
 
 
 def get_existing_images(images_dir):
-    return set(os.listdir(images_dir))
+    try:
+        return set(os.listdir(images_dir))
+    except FileNotFoundError:
+        return set()
 
 
 def chunked_zips(a: list, b: list, n: int) -> List[zip]:
