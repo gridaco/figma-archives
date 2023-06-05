@@ -1,20 +1,24 @@
 from typing import List, Union
 import math
 
+
 def px(r):
     if r is None:
         return None
     return round(r, 2)
+
 
 def o(r):
     if r is None:
         return None
     return round(r, 4)
 
+
 def deg(r):
     if r is None:
         return None
     return round(r, 2)
+
 
 def getfrom(obj, *args, default=None, fallback=None):
     for key in args:
@@ -24,7 +28,9 @@ def getfrom(obj, *args, default=None, fallback=None):
             return default
     return obj if obj is not None else fallback
 
+
 Transform = List[List[float]]
+
 
 def angle_from_transform(transform: Union[Transform, None] = None) -> int:
     if not transform:

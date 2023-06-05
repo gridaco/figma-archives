@@ -1,11 +1,12 @@
 ###
-### converts map.json to csv
-### python csvmap.py <map.json> <map.csv>
+# converts map.json to csv
+# python csvmap.py <map.json> <map.csv>
 ###
 
 import click
 import json
 import csv
+
 
 @click.command()
 @click.argument('input', type=click.File('r'))
@@ -19,6 +20,7 @@ def main(input, output):
         k = key.split('/')[-1]
         v = value.split('/')[-1]
         writer.writerow([k, v])
+
 
 if __name__ == '__main__':
     main()

@@ -69,9 +69,11 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
     # get the ids of the already-sampled files
     completes = [x.parent.name for x in output.glob('**/map.json')]
     # if file.json exists, but map.json does not, it means the file is malformed
-    malforms = [x.parent.name for x in output.glob('**/file.json') if not (x.parent / 'map.json').exists()]
+    malforms = [x.parent.name for x in output.glob(
+        '**/file.json') if not (x.parent / 'map.json').exists()]
 
-    tqdm.write(f"📂 {output} already contains {len(completes)} samples (will be skipped), {len(malforms)} malformed samples (will be replaced)")
+    tqdm.write(
+        f"📂 {output} already contains {len(completes)} samples (will be skipped), {len(malforms)} malformed samples (will be replaced)")
 
     # pre-validate the targtes (check if drafted file exists for community lunk)
     available = [(id, link, _) for id, link, _ in index_data
@@ -109,50 +111,56 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
             # Copy file.json
             try:
                 shutil.copy(dir_files_archive /
-                        f"{file_key}.json", output_dir / "file.json")
+                            f"{file_key}.json", output_dir / "file.json")
             except FileNotFoundError as e:
                 shutil.rmtree(output_dir)
-                raise SamplerException(id, file_key, f"File not found for sample <{title}>")
+                raise SamplerException(
+                    id, file_key, f"File not found for sample <{title}>")
 
             # Copy images
             if not skip_images:
-              images_archive_dir = dir_images_archive / file_key
-              if images_archive_dir.exists():
-                # copy items under images_archive_dir to output_dir/images (files and directories)
-                # shutil.copytree(images_archive_dir, output_dir / "images") - this copies the directory itself
-                for item in images_archive_dir.iterdir():
-                  if item.is_file():
-                    shutil.copy(item, output_dir / item.name)
-                  elif item.is_dir():
-                    shutil.copytree(item, output_dir / item.name)
-              else:
-                if ensure_images:
-                  raise OkException(id, file_key, f"Images not found for sample <{title}>")
+                images_archive_dir = dir_images_archive / file_key
+                if images_archive_dir.exists():
+                    # copy items under images_archive_dir to output_dir/images (files and directories)
+                    # shutil.copytree(images_archive_dir, output_dir / "images") - this copies the directory itself
+                    for item in images_archive_dir.iterdir():
+                        if item.is_file():
+                            shutil.copy(item, output_dir / item.name)
+                        elif item.is_dir():
+                            shutil.copytree(item, output_dir / item.name)
+                else:
+                    if ensure_images:
+                        raise OkException(
+                            id, file_key, f"Images not found for sample <{title}>")
 
             # Write meta.json
             with open(output_dir / "meta.json", "w") as f:
                 try:
-                  meta = meta_data[id]
-                  json.dump(meta, f)
+                    meta = meta_data[id]
+                    json.dump(meta, f)
                 except KeyError:
-                  if ensure_meta:
-                    raise OkException(id, file_key, f"Meta not found for sample <{title}>")
-                  else:
-                    continue
+                    if ensure_meta:
+                        raise OkException(
+                            id, file_key, f"Meta not found for sample <{title}>")
+                    else:
+                        continue
 
             # Write map.json
             with open(output_dir / "map.json", "w") as f:
                 json.dump({"latest": meta_data[id]["version"], "versions": {
                           meta_data[id]["version"]: file_key}}, f)
 
-            tqdm.write(Fore.WHITE + f"☑ {id} → {output_dir} ({file_key} / {title})")
+            tqdm.write(
+                Fore.WHITE + f"☑ {id} → {output_dir} ({file_key} / {title})")
         except OkException as e:
-            tqdm.write(Fore.YELLOW + f'☒ {e.id} → {output_dir} WARNING ({e.file}) - {e.message}')
+            tqdm.write(
+                Fore.YELLOW + f'☒ {e.id} → {output_dir} WARNING ({e.file}) - {e.message}')
         except SamplerException as e:
             tqdm.write(Fore.RED + f"☒ {e.id}/{file_key} - {e.message}")
             output_dir.exists() and shutil.rmtree(output_dir)
         except Exception as e:
-            tqdm.write(Fore.RED + f"☒ {id}/{file_key} - ERROR sampleing <{title}>")
+            tqdm.write(
+                Fore.RED + f"☒ {id}/{file_key} - ERROR sampleing <{title}>")
             output_dir.exists() and shutil.rmtree(output_dir)
             raise e
 
@@ -164,14 +172,17 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
             for file in dir.glob('*.json'):
                 file.unlink()
 
+
 class SamplerException(Exception):
     def __init__(self, id, file, message):
         self.message = message
         self.id = id
         self.file = file
 
+
 class OkException(SamplerException):
     ...
+
 
 def extract_file_key(url):
     """

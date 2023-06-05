@@ -1,6 +1,6 @@
 ###
-### Extracts values k:v formatted csv, stores in a line separated txt
-### python csvmap_values.py <map.csv> <values.txt>
+# Extracts values k:v formatted csv, stores in a line separated txt
+# python csvmap_values.py <map.csv> <values.txt>
 ###
 
 

@@ -24,8 +24,10 @@ def move(src, dst, threads):
     file_queue = Queue()
 
     def index_files():
-        items = [item for item in src_path.rglob('*') if item.name != '.DS_Store']
-        sorted_items = sorted(items, key=lambda x: x.stat().st_size, reverse=True)
+        items = [item for item in src_path.rglob(
+            '*') if item.name != '.DS_Store']
+        sorted_items = sorted(
+            items, key=lambda x: x.stat().st_size, reverse=True)
         for item in sorted_items:
             file_queue.put(item)
 
@@ -67,6 +69,7 @@ def move(src, dst, threads):
             t.join()
 
     print('Move complete.')
+
 
 if __name__ == '__main__':
     move()

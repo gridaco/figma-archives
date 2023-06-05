@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from fnmatch import fnmatch
 
+
 @click.command()
 @click.argument("dir", type=click.Path(exists=True, file_okay=False, dir_okay=True))
 @click.option("--max", default=None, type=int, help="Maximum number of items to process.")
@@ -45,7 +46,8 @@ def main(dir, out, max, depth):
         if os.path.isfile(src):
             shutil.copy(src, dst)
         elif os.path.isdir(src):
-            copytree(src, dst, max_depth=depth)  # Use the custom copytree function
+            # Use the custom copytree function
+            copytree(src, dst, max_depth=depth)
         else:
             raise ValueError(f"Unexpected item type at {src}")
 
@@ -64,12 +66,14 @@ def include_by_depth(src, names, max_depth):
 
     return ignore_list
 
+
 def copytree(src, dst, max_depth=None, symlinks=False, ignore=None):
     global base_src_depth
     base_src_depth = src.count(os.path.sep)
 
     if ignore is None:
-        ignore_func = lambda src, names: include_by_depth(src, names, max_depth)
+        def ignore_func(src, names): return include_by_depth(
+            src, names, max_depth)
     else:
         def ignore_func(src, names):
             return ignore(src, names) + include_by_depth(src, names, max_depth)

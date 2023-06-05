@@ -9,12 +9,13 @@ from .table import create_table, insert_node
 from .lock import update_processed_files, processed_files
 
 
-
 def create_connection(db_file):
     conn = sqlite3.connect(db_file)
     return conn
 
 # Worker function for multithreading
+
+
 def dbworker(queue: Queue, db: str, pbarpos: int):
     # Create a new SQLite database or open an existing one
     conn = create_connection(db)
@@ -22,7 +23,8 @@ def dbworker(queue: Queue, db: str, pbarpos: int):
     # Create the table in the database if it doesn't already exist
     create_table(conn)
 
-    timeout = 60  # if there is no more items in the queue for 60 seconds after the last successful pop, exit.
+    # if there is no more items in the queue for 60 seconds after the last successful pop, exit.
+    timeout = 60
     progress = tqdm(total=0, position=pbarpos, desc='📀', leave=True)
     while True:
         try:
@@ -39,7 +41,7 @@ def dbworker(queue: Queue, db: str, pbarpos: int):
             break
 
     conn.close()
-    
+
 
 def fileworker(queue: Queue, db: Queue, depth, threshold=4096, clean=False):
     while True:
@@ -50,7 +52,7 @@ def fileworker(queue: Queue, db: Queue, depth, threshold=4096, clean=False):
         except Empty:
             tqdm.write(f'File worker exiting')
             break
-        
+
         try:
             root_nodes = roots_from_file(file_path)
             # tqdm.write(f'☐ {file_id} ({len(root_nodes)} items)')
@@ -76,13 +78,14 @@ def fileworker(queue: Queue, db: Queue, depth, threshold=4096, clean=False):
                     del record
             del root_nodes
             if clean:
-              gc.collect()
+                gc.collect()
             update_processed_files(1)
         except Exception as e:
             tqdm.write(f'Error processing {file_id}: {e}')
             update_processed_files(1)
             continue
         time.sleep(0.1)
+
 
 def strfy(obj):
     if obj is None:

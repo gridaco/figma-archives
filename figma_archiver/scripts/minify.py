@@ -1,5 +1,6 @@
 import jsonlines
 import json
+import gzip
 import click
 import random
 from tqdm import tqdm
@@ -14,33 +15,36 @@ def minify_json_file(input_file_path: Path, output_file_path: Path):
             # if the input and output are the same (replace), create a tmp file called {input_file_path}.tmp
             # then rename it to {input_file_path} after it's done, after removing the original file
             if is_replacing:
-              tmp_file_path = input_file_path.with_suffix('.tmp')
-              # write tmp file
-              with tmp_file_path.open('w') as output_file:
-                  data = json.load(input_file)
-                  json.dump(data, output_file, separators=(',', ':'))
-              # remove original file
-              input_file_path.unlink()
-              # rename tmp file to original file
-              tmp_file_path.rename(input_file_path)
+                tmp_file_path = input_file_path.with_suffix('.tmp')
+                # write tmp file
+                with tmp_file_path.open('w') as output_file:
+                    data = json.load(input_file)
+                    json.dump(data, output_file, separators=(',', ':'))
+                # remove original file
+                input_file_path.unlink()
+                # rename tmp file to original file
+                tmp_file_path.rename(input_file_path)
             else:
                 with output_file_path.open('w') as output_file:
                     data = json.load(input_file)
                     json.dump(data, output_file, separators=(',', ':'))
     except KeyboardInterrupt:
         if not is_replacing:
-          tmp_file_path.unlink(missing_ok=True)
-          tqdm.write("Keyboard interrupt detected. Removing incomplete output file.")
+            tmp_file_path.unlink(missing_ok=True)
+            tqdm.write(
+                "Keyboard interrupt detected. Removing incomplete output file.")
         raise
     except Exception as e:
-        if not is_replacing: output_file_path.unlink(missing_ok=True)
+        if not is_replacing:
+            output_file_path.unlink(missing_ok=True)
         raise e
     finally:
         # it can cause loss of original file if interrupted
         # if .tmp file found and input_file_path not found, rename .tmp file to input_file_path
         if is_replacing and not input_file_path.exists() and tmp_file_path.exists():
             tmp_file_path.rename(input_file_path)
-            tqdm.write(f"Restoring .tmp file to original file. {input_file_path}")
+            tqdm.write(
+                f"Restoring .tmp file to original file. {input_file_path}")
 
 
 @click.command()
@@ -75,7 +79,8 @@ def minify_json_directory(input_dir, index_dir, pattern, output, output_pattern,
         minified_files = set()
         if output_pattern == pattern:
             output_pattern = False
-        else: ...
+        else:
+            ...
     else:
         if output_pattern is None:
             output_pattern = pattern
@@ -85,11 +90,12 @@ def minify_json_directory(input_dir, index_dir, pattern, output, output_pattern,
             output_pattern = output_pattern.replace('*', '{key}')
         search_pattern = output_pattern.format(key="*")
         minified_files = set(output.rglob(search_pattern))
-    
+
     minified_files = {f.stem for f in minified_files}
 
     if index_dir:
-        json_files = sort_with_index(json_files=json_files, index_dir=index_dir)
+        json_files = sort_with_index(
+            json_files=json_files, index_dir=index_dir)
 
     if shuffle:
         random.shuffle(json_files)
@@ -100,37 +106,38 @@ def minify_json_directory(input_dir, index_dir, pattern, output, output_pattern,
 
     total_saved_space = 0
     with tqdm(json_files, desc='📦') as progress:
-      for file_path in progress:
-          start_size = file_path.stat().st_size
+        for file_path in progress:
+            start_size = file_path.stat().st_size
 
-          already_minified = False
-          if output_pattern is False: # same parent path
-              output_file_name = file_path.name
-              output_file_path = file_path
-          else:
-              file_key = file_path.stem
-              output_file_name = Path(output_pattern.format(key=file_key))
-              output_file_path = output / output_file_name
+            already_minified = False
+            if output_pattern is False:  # same parent path
+                output_file_name = file_path.name
+                output_file_path = file_path
+            else:
+                file_key = file_path.stem
+                output_file_name = Path(output_pattern.format(key=file_key))
+                output_file_path = output / output_file_name
 
-          # check if input and output are same (overwrite)
-          if output_file_path.exists() and file_path.resolve().samefile(output_file_path.resolve()):
-              # check if the output file has been minified, by checking if it has only one line
-              with output_file_path.open('r') as f:
-                  if len(f.readlines()) == 1:
-                      # skip this file
-                      already_minified = True
+            # check if input and output are same (overwrite)
+            if output_file_path.exists() and file_path.resolve().samefile(output_file_path.resolve()):
+                # check if the output file has been minified, by checking if it has only one line
+                with output_file_path.open('r') as f:
+                    if len(f.readlines()) == 1:
+                        # skip this file
+                        already_minified = True
 
-          if already_minified:
-              tqdm.write(f"📦 Skipping {output_file_path} (already minified)")
-          else:
-              output_file_path.parent.mkdir(parents=True, exist_ok=True)
+            if already_minified:
+                tqdm.write(f"📦 Skipping {output_file_path} (already minified)")
+            else:
+                output_file_path.parent.mkdir(parents=True, exist_ok=True)
 
-              minify_json_file(file_path, output_file_path)
-              saved_space = start_size - output_file_path.stat().st_size
-              saved_space_mb = saved_space / (1024 * 1024)
-              total_saved_space += saved_space_mb
-              tqdm.write(f"📦 Saved {saved_space_mb:.2f} MB for {output_file_path}")
-              progress.desc = f"📦 Saved {(total_saved_space / 1024):.2f} GB"
+                minify_json_file(file_path, output_file_path)
+                saved_space = start_size - output_file_path.stat().st_size
+                saved_space_mb = saved_space / (1024 * 1024)
+                total_saved_space += saved_space_mb
+                tqdm.write(
+                    f"📦 Saved {saved_space_mb:.2f} MB for {output_file_path}")
+                progress.desc = f"📦 Saved {(total_saved_space / 1024):.2f} GB"
 
 
 def sort_with_index(json_files, index_dir):
@@ -158,10 +165,10 @@ def sort_with_index(json_files, index_dir):
     map_file = index_dir / 'map.json'
     if not index_file.exists() or not map_file.exists():
         raise Exception(f"index.json or map.json not found in {index_dir}")
-    
+
     with jsonlines.open(index_dir / 'index.json') as reader:
         index_ids = [x['id'] for x in reader]
-         # Sort the files based on the index
+        # Sort the files based on the index
         with map_file.open('r') as f:
             map_data = json.load(f)
             # Parse and remake the map
@@ -177,9 +184,8 @@ def sort_with_index(json_files, index_dir):
             sorted_json_files = [
                 file_key_to_json_file[map_data[id]] for id in index_ids if id in map_data
             ]
-            
-            return sorted_json_files
 
+            return sorted_json_files
 
 
 def parse_id(url):
@@ -191,6 +197,7 @@ def parse_id(url):
     """
     result = urlsplit(url)
     return Path(result.path).name
+
 
 if __name__ == '__main__':
     minify_json_directory()

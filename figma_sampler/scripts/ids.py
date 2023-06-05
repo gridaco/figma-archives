@@ -1,9 +1,10 @@
 ###
-### python ids.py <input.json> <output.txt> --key <key>
+# python ids.py <input.json> <output.txt> --key <key>
 ###
 
 import click
 import json
+
 
 @click.command()
 @click.argument('input', type=click.File('r'))
@@ -21,6 +22,7 @@ def main(input, output, key):
 
     # log result
     click.echo(f"📝 {len(ids)} ids written to {output.name}")
+
 
 if __name__ == '__main__':
     main()

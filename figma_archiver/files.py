@@ -27,25 +27,25 @@ def is_valid_url(url):
 
 
 def is_valid_json_file(file: Path):
-  if file.exists():
-    with open(file, "r") as output_file:
-      try:
-        json_data = json.load(output_file)
-        if "document" in json_data:
-          return True
-      except:
-          return False
+    if file.exists():
+        with open(file, "r") as output_file:
+            try:
+                json_data = json.load(output_file)
+                if "document" in json_data:
+                    return True
+            except:
+                return False
 
 
 def save_file_locally(args):
     file_key, figma_token, output_path, validate, replace, replace_before, minify = args
     file_path = Path(output_path / f"{file_key}.json")
 
-
     if replace_before:
         # check the last modified date of the file
         if file_path.exists():
-            file_mtime = os.path.getmtime(file_path)  # getmtime returns a float
+            file_mtime = os.path.getmtime(
+                file_path)  # getmtime returns a float
             file_datetime = datetime.datetime.fromtimestamp(file_mtime)
             if replace_before and file_datetime < replace_before:
                 file_path.unlink(missing_ok=True)
@@ -55,13 +55,13 @@ def save_file_locally(args):
     if validate:
         # check if file exists in output_path, validate it, if valid, return
         if is_valid_json_file(file_path):
-           return True
+            return True
 
     try:
         headers = {
             "X-Figma-Token": figma_token
         }
-        
+
         response = requests.get(
             f"{FIGMA_API_BASE_URL}/{file_key}", params={
                 "geometry": "paths"
@@ -82,9 +82,9 @@ def save_file_locally(args):
             return save_file_locally((file_key, figma_token, output_path, validate))
         else:
             return f"Failed to download file {file_key}. Error: {response.status_code}"
-        
+
         if is_valid_json_file(output_path / f"{file_key}.json"):
-           return True
+            return True
         else:
             return f"Failed to save json file properly {file_key}. Malformed json."
     except Exception as e:
@@ -106,10 +106,10 @@ def main(map_file, figma_token, output_dir, concurrency, replace, replace_before
         print(
             "Please set the FIGMA_ACCESS_TOKEN environment variable or provide it with the -t option.")
         exit(1)
-    
+
     # figma token (we don't utilize multiple tokens here.)
     if figma_token.startswith("[") and figma_token.endswith("]"):
-      figma_token = json.loads(figma_token)[0]
+        figma_token = json.loads(figma_token)[0]
 
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -127,13 +127,13 @@ def main(map_file, figma_token, output_dir, concurrency, replace, replace_before
     existing_files = set([p.stem for p in output_path.glob("*.json")])
 
     if validate or replace:
-      file_keys_to_download = file_keys
+        file_keys_to_download = file_keys
     else:
-      file_keys_to_download = [
-          file_key for file_key in file_keys if file_key not in existing_files]
-    
+        file_keys_to_download = [
+            file_key for file_key in file_keys if file_key not in existing_files]
+
     if shuffle:
-      random.shuffle(file_keys_to_download)
+        random.shuffle(file_keys_to_download)
 
     tqdm.write(
         f'archiving {len(file_keys_to_download)} files with {concurrency} threads with minify `{minify}` option.')
@@ -146,12 +146,13 @@ def main(map_file, figma_token, output_dir, concurrency, replace, replace_before
         pool.terminate()
         pool.join()
         sys.exit(1)
-    
+
     if validate:
-      for file in tqdm(output_path.glob("*.json"), desc="Validation"):
-          if not is_valid_json_file(file):
-            tqdm.write(f"Failed to validate json file properly {file}. Malformed json. Unlinking...")
-            file.unlink()
+        for file in tqdm(output_path.glob("*.json"), desc="Validation"):
+            if not is_valid_json_file(file):
+                tqdm.write(
+                    f"Failed to validate json file properly {file}. Malformed json. Unlinking...")
+                file.unlink()
 
     for result in results:
         if isinstance(result, str) and result.startswith("Failed"):

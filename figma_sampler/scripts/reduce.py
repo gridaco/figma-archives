@@ -4,6 +4,7 @@ import shutil
 import random
 import click
 
+
 @click.command()
 @click.argument('samples_dir', type=click.Path(exists=True, file_okay=False, dir_okay=True))
 @click.option('--to', help='Number of target to be reduced as', required=True, type=int)
@@ -20,6 +21,7 @@ def main(samples_dir, to):
         tqdm.write(f"🗑️ {d}")
 
     tqdm.write(f"🗑️ {to_remove} directories removed, {to} directories left.")
+
 
 if __name__ == '__main__':
     main()

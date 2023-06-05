@@ -110,6 +110,7 @@ def authenticate(driver):
 
     return True
 
+
 def get_driver_options():
     chrome_options = Options()
 
@@ -130,7 +131,6 @@ def get_driver_options():
     chrome_options.add_argument("--mute-audio")
     chrome_options.add_argument('--disable-smooth-scrolling')
 
-
     return chrome_options
 
 
@@ -141,9 +141,9 @@ def main(file, batch_size):
     # Initialize Selenium WebDriver
     chrome_options = get_driver_options()
     caps = DesiredCapabilities().CHROME
-    caps["pageLoadStrategy"] = "none" # this disables waiting for page load
-    driver = webdriver.Chrome(ChromeDriverManager().install(), options=chrome_options, desired_capabilities=caps)
-
+    caps["pageLoadStrategy"] = "none"  # this disables waiting for page load
+    driver = webdriver.Chrome(ChromeDriverManager().install(
+    ), options=chrome_options, desired_capabilities=caps)
 
     try:
         progress = load_progress()
@@ -162,7 +162,6 @@ def main(file, batch_size):
         tqdm.write("\nInterrupted by user. Exiting...")
     finally:
         driver.quit()
-
 
 
 # Add the progress parameter to process_files
@@ -199,11 +198,10 @@ def copy_file(driver, link, max_retries=3):
             driver.get(link)
             time.sleep(0.1)
 
-
             # use header element to determin fi the page is loaded, since the page load strategy is none
             WebDriverWait(driver, 5).until(
-                    EC.presence_of_element_located(
-                        (By.XPATH, '//header'))
+                EC.presence_of_element_located(
+                    (By.XPATH, '//header'))
             )
             break
 
@@ -211,7 +209,8 @@ def copy_file(driver, link, max_retries=3):
             try:
                 # check if 404
                 WebDriverWait(driver, 1).until(
-                    EC.presence_of_element_located((By.XPATH, '//h2[text()="The page you are looking for can\'t be found."]'))
+                    EC.presence_of_element_located(
+                        (By.XPATH, '//h2[text()="The page you are looking for can\'t be found."]'))
                 )
 
                 tqdm.write(f"404 encountered. Skipping...")
@@ -220,21 +219,19 @@ def copy_file(driver, link, max_retries=3):
                 pass
 
             retries += 1
-            tqdm.write(f"TimeoutException encountered. Retrying {retries}/{max_retries}...")
+            tqdm.write(
+                f"TimeoutException encountered. Retrying {retries}/{max_retries}...")
             if retries == max_retries:
-                tqdm.write(f"Failed to load {link} after {max_retries} retries. Skipping...")
+                tqdm.write(
+                    f"Failed to load {link} after {max_retries} retries. Skipping...")
                 return err_timeout_code
             time.sleep(1)
-
-
-
-
 
     tqdm.write(f"Locating the copy button...")
     try:
         duplicate_button = WebDriverWait(driver, 1).until(
             EC.presence_of_element_located(
-            # locate the button with attribute data-testid="community-duplicate-button"
+                # locate the button with attribute data-testid="community-duplicate-button"
                 (By.XPATH, '//button[@data-testid="community-duplicate-button"]'))
         )
         # if above changes in the future, try the following
@@ -246,7 +243,7 @@ def copy_file(driver, link, max_retries=3):
         # this could be beause the file is a paid file
         tqdm.write(f"Unable to locate the copy button. Skipping...")
         return
-    
+
     # Click the copy button
     try:
         duplicate_button.click()
@@ -295,7 +292,6 @@ def copy_file(driver, link, max_retries=3):
     except:
         tqdm.write(f"Failed to copy the file at {link}")
         return False
-
 
 
 if __name__ == "__main__":

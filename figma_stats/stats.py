@@ -1,3 +1,4 @@
+from utils import is_text_not_empty, visit, flatten, extract_text
 import json
 from pathlib import Path
 import random
@@ -10,8 +11,6 @@ import sys
 # for easily importing utils
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, current_dir)
-
-from utils import is_text_not_empty, visit, flatten, extract_text
 
 
 @click.command()
@@ -79,7 +78,6 @@ def main(samples, max, shuffle):
                 is_text_not_empty(layer['name']) and f.write(
                     layer['name'].strip() + '\n')
         f.close()
-
 
 
 if __name__ == '__main__':
