@@ -6,7 +6,8 @@ from tqdm import tqdm
 
 @click.command()
 @click.option('--dir', default='.', help='Directory to process JSON files and create subdirectories.')
-def process_json_files(dir):
+@click.option('--match', default='.json', help='file extension pattern to match')
+def process_json_files(dir, match):
     """
     Process JSON files in the given directory.
     The directory manipulated by files.py has a single directory with json files under it.
@@ -27,12 +28,13 @@ def process_json_files(dir):
         - images/
 
     """
-    json_files = [file_name for file_name in os.listdir(
-        dir) if file_name.endswith('.json')]
+    json_files: list[str] = [file_name for file_name in os.listdir(
+        dir) if file_name.endswith(match)]
 
     for file_name in tqdm(json_files, desc="Processing JSON files", unit="file"):
-        if file_name.endswith('.json'):
-            key = file_name[:-5]  # Remove .json extension to get the key
+        if file_name.endswith(match):
+            # Remove (match) extension to get the key
+            key = file_name.split(match)[0]
             new_dir = os.path.join(dir, key)
             new_file_path = os.path.join(new_dir, file_name)
             images_dir = os.path.join(new_dir, 'images')
