@@ -678,7 +678,10 @@ def sync_metadata_for_exports(root_dir, src_dir, key):
     Saves the metadata under the root directory (of the file) to indicate which images are fulfilled.
     """
 
-    path = Path(root_dir) / key / "exports"
+    path: Path = Path(root_dir) / key / "exports"
+    if not path.exists():
+        return
+
     document = read_file_data(Path(src_dir) / f"{key}.json")
     metadata = path / "meta.json"  # would be /:filekey/exports/meta.json
 
