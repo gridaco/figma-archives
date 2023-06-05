@@ -1,3 +1,8 @@
+# this is a file syncer, which you can specify your own file pattern with wildcards to selectively upload files to s3
+# this is useful when one-time-modifications are required.
+# in most cases, you may want to use awscli's s3 sync instead - it's more efficient and optimized.
+# this script does not have diff checking, so it will upload all files every time.
+
 import os
 import glob
 import click
