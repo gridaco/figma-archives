@@ -11,3 +11,4 @@ jsonlines
 colorama
 ijson
 Pillow
+boto3
