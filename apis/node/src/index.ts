@@ -23,7 +23,7 @@ export const Client = (): ClientInterface => {
       //     ids: params.ids ? params.ids.join(",") : "",
       //   },
       // }
-      clients.file.get(`/${fileId}/file.json`),
+      clients.file.get(`/${fileId}/file.json.gz`),
 
     // fileNodes: (fileId, params) =>
     //   clients.file.get(`files/${fileId}/nodes`, {

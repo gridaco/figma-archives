@@ -1,4 +1,5 @@
 import fs from "fs/promises";
+import zlib from "zlib";
 import path from "path";
 import mime from "mime-types";
 import type { AxiosResponse, AxiosRequestHeaders } from "axios";
@@ -11,8 +12,13 @@ const _mock_axios_request = async <T = any>(
   try {
     const { size: content_length } = await fs.stat(path);
     const content_type = mime.lookup(path) || "application/json";
+    const buffer = await fs.readFile(path);
+    const txt = (
+      path.endsWith(".gz") ? await zlib.gunzipSync(buffer) : buffer
+    ).toString();
+    const data = JSON.parse(txt) as T;
     return {
-      data: JSON.parse(await fs.readFile(path, "utf-8")) as T,
+      data: data as T,
       status: 200,
       statusText: "OK",
       headers: {},
@@ -21,7 +27,7 @@ const _mock_axios_request = async <T = any>(
           Accept: content_type,
           "Content-Length": content_length,
           "User-Agent": "@figma-api/community/fs",
-          "Content-Encoding": "utf-8",
+          "Content-Encoding": path.endsWith(".gz") ? "gzip" : "utf-8",
           "Content-Type": "application/json",
         } as AxiosRequestHeaders,
       },
@@ -43,18 +49,18 @@ export const Client = ({
   paths,
 }: {
   paths: {
-    file: string;
-    image: string;
+    files: string;
+    images: string;
   };
 }): ClientInterface => {
   const clients = {
     file: {
       get: async (url: string) =>
-        _mock_axios_request(path.join(paths.file, url)),
+        _mock_axios_request(path.join(paths.files, url)),
     },
     image: {
       get: async (url: string) =>
-        _mock_axios_request(path.join(paths.image, url)),
+        _mock_axios_request(path.join(paths.images, url)),
     },
   };
 
@@ -62,7 +68,7 @@ export const Client = ({
     meta: (fileId) => clients.file.get(`/${fileId}/meta.json`),
     file: (fileId, params = {}) =>
       // params not supported atm
-      clients.file.get(`/${fileId}/file.json`),
+      clients.file.get(`/${fileId}/file.json.gz`),
 
     // fileNodes: (fileId, params) =>
     //   clients.file.get(`files/${fileId}/nodes`, {
@@ -78,7 +84,7 @@ export const Client = ({
 
       return {
         ...res,
-        data: fileImages(fileId, data, params, paths.image),
+        data: fileImages(fileId, data, params, paths.images),
       };
     },
 
@@ -89,7 +95,7 @@ export const Client = ({
       if (res.status === 200) {
         return {
           ...res,
-          data: fileImageFills(fileId, data, paths.image),
+          data: fileImageFills(fileId, data, paths.images),
         };
       } else {
         return res;
