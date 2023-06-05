@@ -1,12 +1,13 @@
 import random
 from urllib.parse import urlparse
+import gzip
 import json
 import shutil
 from pathlib import Path
 import click
 from tqdm import tqdm
 import jsonlines
-from colorama import Fore, Back, Style
+from colorama import Fore
 
 
 @click.command()
@@ -18,15 +19,17 @@ from colorama import Fore, Back, Style
 @click.option('--dir-images-archive', required=False, type=click.Path(exists=True, file_okay=False), help='Path to images archive directory')
 @click.option('--sample', default=None, type=int, help='Number of samples to process')
 @click.option('--sample-all', is_flag=False, help='Process all available data')
+@click.option('--no-compress', is_flag=True, default=False, help='If set, the file.json will be not be compressed with gzip - if the source is .json.gz, it will follow the origin even if set')
 @click.option('--ensure-images', is_flag=True, default=False, help='Ensure images exists for files')
 @click.option('--ensure-meta', is_flag=True, default=True, help='Ensure meta exists for files')
 @click.option('--skip-images', is_flag=True, default=False, help='Skip images copy for files')
 @click.option('--only-images', is_flag=True, default=False, help='Only copy images for files')
 @click.option('--shuffle', is_flag=True, default=False, help='Shuffle the index')
-def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample, sample_all, ensure_images, ensure_meta, skip_images, only_images, shuffle):
+def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample, sample_all, no_compress, ensure_images, ensure_meta, skip_images, only_images, shuffle):
     index = Path(index)
     dir_files_archive = Path(dir_files_archive)
-    dir_images_archive = Path(dir_images_archive)
+    dir_images_archive = Path(
+        dir_images_archive) if dir_images_archive is not None else None
 
     # check if index is a directory
     if index.is_dir():
@@ -70,7 +73,7 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
     completes = [x.parent.name for x in output.glob('**/map.json')]
     # if file.json exists, but map.json does not, it means the file is malformed
     malforms = [x.parent.name for x in output.glob(
-        '**/file.json') if not (x.parent / 'map.json').exists()]
+        '**/file.json?(.gz)') if not (x.parent / 'map.json').exists()]
 
     tqdm.write(
         f"📂 {output} already contains {len(completes)} samples (will be skipped), {len(malforms)} malformed samples (will be replaced)")
@@ -108,10 +111,12 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
             # and create a new one
             output_dir.mkdir(parents=False, exist_ok=False)
 
-            # Copy file.json
+            origin = dir_files_archive / f"{file_key}.json"
+            target = output_dir / "file.json" if no_compress else output_dir / "file.json.gz"
+
+            # Copy file.json (compress if needed)
             try:
-                shutil.copy(dir_files_archive /
-                            f"{file_key}.json", output_dir / "file.json")
+                copy_and_compress(origin, target, no_compress)
             except FileNotFoundError as e:
                 shutil.rmtree(output_dir)
                 raise SamplerException(
@@ -182,6 +187,16 @@ class SamplerException(Exception):
 
 class OkException(SamplerException):
     ...
+
+
+def copy_and_compress(origin, target, no_compress=False):
+    if no_compress:
+        # Just copy the file without compressing
+        shutil.copy(origin, target)
+    else:
+        with open(origin, 'rb') as src:
+            with gzip.open(target, 'wb') as dest:
+                shutil.copyfileobj(src, dest)
 
 
 def extract_file_key(url):
