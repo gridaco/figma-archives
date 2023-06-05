@@ -805,28 +805,30 @@ def get_node_ids_and_depths(data, depth=None, include_canvas=False, types=None):
                 depth_map.update(child_depth_map)
 
         return ids, depth_map
-
-    if include_canvas:
-        ids, depth_map = zip(*[
-            extract_ids_recursively(child, 0)
-            for child in data["document"]["children"]
-        ])
-    else:
-        ids, depth_map = zip(*[
-            extract_ids_recursively(child, 0)
-            for canvas in data["document"]["children"]
-            for child in canvas['children']
-        ])
-
-    # Flatten lists and merge dictionaries
-    ids = [id_ for sublist in ids for id_ in sublist]
-    depth_map = {k: v for dict_ in depth_map for k, v in dict_.items()}
     try:
-        max_depth = max(depth_map.values())
-    except ValueError:
-        max_depth = 0
+        if include_canvas:
+            ids, depth_map = zip(*[
+                extract_ids_recursively(child, 0)
+                for child in data["document"]["children"]
+            ])
+        else:
+            ids, depth_map = zip(*[
+                extract_ids_recursively(child, 0)
+                for canvas in data["document"]["children"]
+                for child in canvas['children']
+            ])
 
-    return ids, depth_map, max_depth
+        # Flatten lists and merge dictionaries
+        ids = [id_ for sublist in ids for id_ in sublist]
+        depth_map = {k: v for dict_ in depth_map for k, v in dict_.items()}
+        try:
+            max_depth = max(depth_map.values())
+        except ValueError:
+            max_depth = 0
+
+        return ids, depth_map, max_depth
+    except ValueError:
+        return [], {}, 0
 
 
 def get_existing_images(images_dir):
