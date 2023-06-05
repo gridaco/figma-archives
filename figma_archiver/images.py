@@ -833,7 +833,7 @@ def get_node_ids_and_depths(data, depth=None, include_canvas=False, types=None):
             max_depth = 0
 
         return ids, depth_map, max_depth
-    except ValueError:
+    except (ValueError, TypeError):
         return [], {}, 0
 
 
