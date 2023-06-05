@@ -76,7 +76,7 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
     completes = [x.parent.name for x in output.glob('**/map.json')]
     # if file.json exists, but map.json does not, it means the file is malformed
     malforms = [x.parent.name for x in output.glob(
-        '**/file.json?(.gz)') if not (x.parent / 'map.json').exists()]
+        '**/file.json*') if not (x.parent / 'map.json').exists()]
 
     tqdm.write(
         f"📂 {output} already contains {len(completes)} samples (will be skipped), {len(malforms)} malformed samples (will be replaced)")
@@ -181,7 +181,7 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
         # if only images, remove all files under top level directories
         for dir in tqdm(output.iterdir(), desc='🗑️', leave=True, colour='white'):
             # meta.json, map.json, file.json (or file.json.gz) are not images
-            for file in dir.glob('*.json?(.gz)'):
+            for file in dir.glob('*.json*'):
                 file.unlink()
 
 
