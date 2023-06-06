@@ -54,24 +54,24 @@ export const Client = ({
   };
 }): ClientInterface => {
   const clients = {
-    file: {
+    files: {
       get: async (url: string) =>
         _mock_axios_request(path.join(paths.files, url)),
     },
-    image: {
+    images: {
       get: async (url: string) =>
         _mock_axios_request(path.join(paths.images, url)),
     },
   };
 
   return {
-    meta: (fileId) => clients.file.get(`/${fileId}/meta.json`),
+    meta: (fileId) => clients.files.get(`/${fileId}/meta.json`),
     file: (fileId, params = {}) =>
       // params not supported atm
-      clients.file.get(`/${fileId}/file.json.gz`),
+      clients.files.get(`/${fileId}/file.json.gz`),
 
     fileNodes: async (fileId, params) => {
-      const res = await clients.file.get(`/${fileId}/file.json.gz`);
+      const res = await clients.files.get(`/${fileId}/file.json.gz`);
       const data = getFileNodes(res.data, params);
       return {
         ...res,
@@ -80,7 +80,7 @@ export const Client = ({
     },
 
     fileImages: async (fileId, params) => {
-      const res = await clients.image.get(`/${fileId}/exports/meta.json`);
+      const res = await clients.images.get(`/${fileId}/exports/meta.json`);
       const { data } = res;
 
       return {
@@ -90,7 +90,7 @@ export const Client = ({
     },
 
     fileImageFills: async (fileId) => {
-      const res = await clients.image.get(`/${fileId}/images/meta.json`);
+      const res = await clients.images.get(`/${fileId}/images/meta.json`);
       const { data } = res;
 
       if (res.status === 200) {
