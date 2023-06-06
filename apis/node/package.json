@@ -7,7 +7,7 @@
     "API",
     "Data set"
   ],
-  "version": "0.0.3",
+  "version": "0.0.4",
   "private": false,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -15,7 +15,7 @@
   "homepage": "https://github.com/gridaco/figma-archives/tree/main/apis/node",
   "repository": "https://github.com/gridaco/figma-archives",
   "exports": {
-    ".": "./",
+    ".": "./dist/index.js",
     "./fs": "./dist/fs.js"
   },
   "typesVersions": {
