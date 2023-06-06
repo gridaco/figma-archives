@@ -7,7 +7,7 @@
     "API",
     "Data set"
   ],
-  "version": "0.0.4",
+  "version": "0.0.5",
   "private": false,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -20,8 +20,11 @@
   },
   "typesVersions": {
     "*": {
-      "*": [
-        "dist/*"
+      ".": [
+        "dist/index.d.ts"
+      ],
+      "fs": [
+        "dist/fs.d.ts"
       ]
     }
   },
