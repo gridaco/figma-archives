@@ -47,8 +47,8 @@ export function fileImageFills(
     error: false,
     status: 200,
     meta: {
-      images: Object.keys(meta.meta.images).reduce((acc, key) => {
-        const image = meta.meta.images[key];
+      images: Object.keys(meta.images).reduce((acc, key) => {
+        const image = meta.images[key];
         return {
           ...acc,
           [key]: `${baseURL}/${fileId}/images/${image}`,
