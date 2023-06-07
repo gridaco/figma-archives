@@ -1,5 +1,6 @@
 import glob
 import logging
+import mimetypes
 from multiprocessing import cpu_count
 import random
 import threading
@@ -7,7 +8,6 @@ import click
 import time
 import json
 import os
-import re
 import shutil
 import tempfile
 import requests
@@ -22,13 +22,17 @@ from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import partial
 import queue
-from typing import List, Tuple
+from typing import List, Callable
 import resource
 from PIL import Image
+from PIL.PngImagePlugin import PngInfo
 from datetime import datetime
 import math
 import io
+import numpy as np
 
+# TODO: gifRef support
+# TODO: ext support with mimetype
 
 resource.setrlimit(
     resource.RLIMIT_CORE,
@@ -43,14 +47,15 @@ BOTTOM_POSITION = 24
 
 @click.command()
 @click.option("-v", "--version", default=0, type=click.INT, help="Version number to specify cache - update for new versions")
-@click.option("-dir", default="./downloads", type=click.Path(exists=True, file_okay=False, dir_okay=True), help="Directory for the images to be saved - ~dir/:key/images/.png")
+@click.option("-dir", default="./downloads", type=click.Path(file_okay=False, dir_okay=True), help="Directory for the images to be saved - ~dir/:key/images/.png")
 @click.option("-fmt", '--format',  default="png", help="Image format to export the layers")
 @click.option("-s", '--scale', default="1", help="Image scale")
 @click.option("-d", '--depth',  default=None, help="Layer depth to go recursively", type=click.INT)
 @click.option('--include-canvas',  default=False, help="Includes the canvas while exporting images (False by default)")
 @click.option('--no-fills', is_flag=True, default=False, help="Skips the download for Image fills")
 @click.option("--optimize", is_flag=True, help="Optimize images size (Now only applied to hash images)", default=False, type=click.BOOL)
-@click.option("--max-mb-hash", help="Max mb to be applied to has images (if optimize is true)", default=1, type=click.INT)
+@click.option("--no-exports", is_flag=True, default=False, help="Skips the download for Node exports")
+@click.option("--max-mb-hash", help="Max mb to be applied to has images (if optimize is true)", default=None, type=click.INT)
 @click.option('--only-thumbnails', is_flag=True, default=False, help="process only thumbnails. this is usefull when thumbnail is expired & files are fresh-fetched")
 @click.option('--types', default=None, help="specify the type of node to be fetched", type=click.STRING)
 @click.option('--thumbnails', is_flag=True, default=False, help="Set this flag to download thumbnail.png as well")
@@ -61,7 +66,8 @@ BOTTOM_POSITION = 24
 @click.option("--skip-n", help="Number of files to skip (for dubugging).", default=0, type=int)
 @click.option("--no-download", is_flag=True, help="No downloading the images (This can be used if you want this script to only run for optimizing existing images)", default=0, type=int)
 @click.option("--shuffle", is_flag=True, help="Rather if to randomize the input for even distribution", default=False, type=click.BOOL)
-def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize, max_mb_hash, types, thumbnails, only_thumbnails, only_sync, figma_token, source_dir, concurrency, skip_n, no_download, shuffle):
+@click.option("--sample", default=None, help="Sample n files from the input", type=click.INT)
+def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize, no_exports, max_mb_hash, types, thumbnails, only_thumbnails, only_sync, figma_token, source_dir, concurrency, skip_n, no_download, shuffle, sample):
     # progress bar position config
     global BOTTOM_POSITION
     BOTTOM_POSITION = concurrency * 2 + 5
@@ -77,6 +83,9 @@ def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize,
             click.echo(
                 "Error: --only-thumbnails option requires --thumbnails option to be set as well")
             return
+
+    if no_exports:
+        depth = 0
 
     if types is not None:
         # split and trim
@@ -100,6 +109,7 @@ def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize,
     _src_file_pattern = source_dir.split("/")[-1]            # e.g. *.json
     json_files = glob.glob(_src_file_pattern, root_dir=_src_dir)
     json_files = json_files[skip_n:]
+    json_files = json_files[:sample] if sample else json_files
     file_keys = [Path(file).stem for file in json_files]
 
     # randomize for even distribution
@@ -136,6 +146,7 @@ def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize,
                 'img_queue': img_queue,
                 'include_canvas': include_canvas,
                 'no_fills': no_fills,
+                'no_exports': no_exports,
                 'thumbnails': thumbnails,
                 'types': types,
                 'figma_token': figma_tokens[(_ + 1) % len(figma_tokens)],
@@ -173,7 +184,7 @@ def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize,
         tqdm.write(f"🔥 {root_dir/key}")
 
 
-def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, include_canvas: bool, no_fills: bool, thumbnails: bool, types: list[str], figma_token: str, format: str, scale: int, optimize: bool, max_mb_hash: int, depth: int, index: int, size: int, pbar: tqdm, concurrency: int, no_download: bool):
+def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, include_canvas: bool, no_fills: bool, no_exports: bool, thumbnails: bool, types: list[str], figma_token: str, format: str, scale: int, optimize: bool, max_mb_hash: int, depth: int, index: int, size: int, pbar: tqdm, concurrency: int, no_download: bool):
     # for key, json_file in files:
     for key, json_file in tqdm(files, desc=f"⚡️ {figma_token[:8]}", position=BOTTOM_POSITION-(index+4), leave=True, total=size):
         subdir: Path = root_dir / key
@@ -189,7 +200,7 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                 # fetch and save thumbnail (if not already downloaded)
                 if not (subdir / "thumbnail.png").is_file() and not no_download:
                     thumbnail_url = file_data["thumbnailUrl"]
-                    download_image(thumbnail_url, subdir / "thumbnail.png")
+                    download(thumbnail_url, subdir / "thumbnail.png")
                     # tqdm.write(f"Saved thumbnail to {subdir / 'thumbnail.png'}")
 
             node_ids, depths, maxdepth = get_node_ids_and_depths(
@@ -199,7 +210,9 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
             if not no_fills:
                 images_dir = subdir / "images"
                 images_dir.mkdir(parents=True, exist_ok=True)
-                existing_images = os.listdir(images_dir)
+                existing_images = get_existing_images(images_dir)
+
+                paint_map = image_paint_map(file_data["document"])
 
                 # TODO: this is not safe. the image fills still can be not complete if we terminate during the download
                 # Fetch and save image fills (B)
@@ -207,60 +220,100 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                     # tqdm.write("Fetching image fills...")
                     image_fills = fetch_file_images(key, token=figma_token)
                     url_and_path_pairs = [
-                        (url, os.path.join(images_dir, f"{hash_}.{format}"))
+                        (url, os.path.join(images_dir, hash_))
                         for hash_, url in image_fills.items()
                     ]
 
+                    # Figma api also returns hashes for images that are not used in the file. We need to filter them out
+                    hashes = paint_map.keys()
+
+                    # update the url_and_path_pairs to only include the hashes that are in the paint_map
+                    url_and_path_pairs = [
+                        (url, path)
+                        for url, path in url_and_path_pairs
+                        if Path(path).stem in hashes
+                    ]
+
+                    def optimizer(path):
+                        hash = Path(path).stem
+                        # tqdm.write(hash, paint_map)
+                        # print(hashes, hash, paint_map, json_file)
+                        opt = optimized_image_paint_map(
+                            paint_map={hash: paint_map[hash]},
+                            images={
+                                hash: path
+                            }
+                        )
+
+                        out = os.path.join(images_dir, hash+'.png')
+                        max_width = opt[hash]["max"]["width"]
+                        max_height = opt[hash]["max"]["height"]
+
+                        if max_mb_hash is not None and max_mb_hash > 0:
+                            success, saved, dimA, dimB, scale = optimize_image(
+                                path=path,
+                                out=out,
+                                max_size=max_mb_hash*mb,
+                                max_width=max_width, max_height=max_height
+                            )
+                            if (success):
+                                aw, ah = dimA
+                                bw, bh = dimB
+                                tqdm.write(
+                                    f"☑ {fixstr(f'(optimized) {(saved / mb):.2f}MB @x{scale:.2f} {aw}x{ah} → {bw}x{bh} (max: {int(max_width)}x{int(max_height)} | {max_mb_hash}mb) {hash} ...')} → {out}")
+
                     # we don't use queue for has images
                     fetch_and_save_image_fills(
-                        url_and_path_pairs, max_mb=max_mb_hash)
+                        url_and_path_pairs, optimizer=optimizer)
                     # for pair in url_and_path_pairs:
-                    #   img_queue.put(pair + (max_mb_hash,))
+                    #   img_queue.put(pair + (optimizer,))
                 else:
                     # tqdm.write(f"{images_dir} - Image fills already fetched")
                     ...
-                    if optimize:
-                        for image in existing_images:
-                            file = images_dir / image
-                            success, saved = optimize_image(
-                                file, max_mb=max_mb_hash)
-                            if success:
-                                tqdm.write(
-                                    f"☑ {fixstr(f'(existing) Saved {(saved / 1024 / 1024):.2f}MB')}... → {file}")
+                    # TODO: optimizing existing image should also have w/h factor
+                    # if optimize:
+                    #     for image in existing_images:
+                    #         file = images_dir / image
+                    #         success, saved, dim, scale = optimize_image(
+                    #             file, max_size=max_mb_hash*mb)
+                    #         if success:
+                    #             tqdm.write(
+                    #                 f"☑ {fixstr(f'(existing) Saved {(saved / mb):.2f}MB')}... → {file}")
 
             # ----------------------------------------------------------------------
             # exports
-            images_dir = subdir / "exports"
-            images_dir.mkdir(parents=True, exist_ok=True)
-            existing_images = os.listdir(images_dir)
+            if not no_exports:
+                images_dir = subdir / "exports"
+                images_dir.mkdir(parents=True, exist_ok=True)
+                existing_images = get_existing_images(images_dir)
 
-            # Fetch and save layer images (A)
-            node_ids_to_fetch = [
-                node_id
-                for node_id in node_ids
-                if f"{node_id}.{format}" not in existing_images
-                and f"{node_id}@{scale}x.{format}" not in existing_images
-            ]
-
-            if node_ids_to_fetch and not no_download:
-                # tqdm.write(f"Fetching {len(node_ids_to_fetch)} of {len(node_ids)} layer images...")
-                layer_images = fetch_node_images(
-                    key, node_ids_to_fetch, scale, format, token=figma_token, position=BOTTOM_POSITION-((concurrency*2)+index), conncurrency=concurrency)
-                url_and_path_pairs = [
-                    (
-                        url,
-                        os.path.join(
-                            images_dir,
-                            f"{node_id}{'@' + str(scale) + 'x' if scale != '1' else ''}.{format}",
-                        ),
-                    )
-                    for node_id, url in layer_images.items()
+                # Fetch and save layer images (A)
+                node_ids_to_fetch = [
+                    node_id
+                    for node_id in node_ids
+                    if f"{node_id}.{format}" not in existing_images
+                    and f"{node_id}@{scale}x.{format}" not in existing_images
                 ]
-                for pair in url_and_path_pairs:
-                    img_queue.put(pair + (None,))
-            else:
-                # tqdm.write(f"{images_dir} - Layer images already fetched")
-                ...
+
+                if node_ids_to_fetch and not no_download:
+                    # tqdm.write(f"Fetching {len(node_ids_to_fetch)} of {len(node_ids)} layer images...")
+                    layer_images = fetch_node_images(
+                        key, node_ids_to_fetch, scale, format, token=figma_token, position=BOTTOM_POSITION-((concurrency*2)+index), conncurrency=concurrency)
+                    url_and_path_pairs = [
+                        (
+                            url,
+                            os.path.join(
+                                images_dir,
+                                f"{node_id}{'@' + str(scale) + 'x' if scale != '1' else ''}.{format}",
+                            ),
+                        )
+                        for node_id, url in layer_images.items()
+                    ]
+                    for pair in url_and_path_pairs:
+                        img_queue.put(pair + (None,))
+                else:
+                    # tqdm.write(f"{images_dir} - Layer images already fetched")
+                    ...
 
             tqdm.write(f"☑ {subdir}")
         else:
@@ -291,22 +344,19 @@ def requests_retry_session(
                    SSLError), max_tries=5,
     logger=logging.getLogger('backoff').addHandler(logging.StreamHandler())
 )
-def download_image(url, output_path, max_mb=None, timeout=10):
+def download(url, output_path: str, timeout=10):
     if url is None:
         return None, None
     try:
         response = requests_retry_session().get(url, stream=True, timeout=timeout)
         response.raise_for_status()
+        if not '.' in output_path:
+            output_path = f'{output_path}{mimetypes.guess_extension(response.headers["Content-Type"])}'
         with open(output_path, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
             f.close()
 
-        if max_mb is not None and max_mb > 0:
-            success, saved = optimize_image(output_path, max_mb=max_mb)
-            if (success):
-                tqdm.write(
-                    f"☑ {fixstr(f'Optimized - saved {(saved / 1024 / 1024):.2f}MB')}... → {output_path}")
         return url, output_path
     # check if 403 Forbidden
     except requests.exceptions.HTTPError as e:
@@ -314,20 +364,20 @@ def download_image(url, output_path, max_mb=None, timeout=10):
             log_error(f"☒ {fixstr(f'Forbidden (Expired): {url}')}", print=True)
             return None, None
         else:
-            tqdm.write(f"☒ Error downloading {url}: {e}")
+            tqdm.write(f"☒ Error {e} while downloading {url}")
             return None, None
     except Exception as e:
-        tqdm.write(f"☒ Error downloading {url}: {e}")
+        tqdm.write(f"☒ Error {e} while downloading {url}")
         return None, None
 
 
-def download_image_with_progress_bar(item, progress):
-    url, path, max_mb = item
-    download_image(url, path, max_mb=max_mb)
-    progress.update(1)
-
-
 def image_queue_handler(img_queue: queue.Queue, batch=64):
+    def download_image_with_progress_bar(item, progress):
+        url, path, pp = item
+        # TODO: use post processing
+        download(url, path)
+        progress.update(1)
+
     emojis = ['📭', '📬', '📫']
 
     total = 0
@@ -340,12 +390,12 @@ def image_queue_handler(img_queue: queue.Queue, batch=64):
 
         while len(items_to_process) < batch:
             try:
-                url, path, max_mb = img_queue.get(timeout=1)
+                url, path, pp = img_queue.get(timeout=1)
                 if url == 'EOD':  # Check for sentinel value ('EOD', 'EOD')
                     break
 
                 if url is not None:
-                    items_to_process.append((url, path, max_mb))
+                    items_to_process.append((url, path, pp))
                     total += 1
                     progress.desc = f"📭 ({total}/{len(items_to_process)}/{batch}/{total}/{total+img_queue.qsize()})"
             except queue.Empty:
@@ -370,14 +420,18 @@ def image_queue_handler(img_queue: queue.Queue, batch=64):
     tqdm.write("✅ Image Archiving Complete")
 
 
-def fetch_and_save_image_fills(url_and_path_pairs, max_mb=1, position=5, num_threads=64):
+PostProcessor = Callable[[str], None]
+Optimizer = PostProcessor
+
+
+def fetch_and_save_image_fills(url_and_path_pairs, optimizer: Optimizer, position=4, num_threads=64):
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
-        futures = {executor.submit(download_image, url, path, max_mb): (
+        futures = {executor.submit(download, url, path): (
             url, path) for url, path in url_and_path_pairs}
 
         if position is not None:
             futures = tqdm(as_completed(futures), total=len(
-                futures), desc=f"Downloading images (Utilizing {num_threads} threads)", position=position, leave=False)
+                futures), desc=f"Downloading fills (Utilizing {num_threads} threads)", position=position, leave=False)
         else:
             futures = as_completed(futures)
 
@@ -385,13 +439,13 @@ def fetch_and_save_image_fills(url_and_path_pairs, max_mb=1, position=5, num_thr
             url, downloaded_path = future.result()
             if downloaded_path:
                 tqdm.write(f"☑ {fixstr(url)} → {downloaded_path}")
-                if max_mb is not None and max_mb > 0:
-                    optimize_image(downloaded_path, max_mb=max_mb)
+                if optimizer is not None:
+                    optimizer(downloaded_path)
             else:
                 tqdm.write(f"Failed to download image: {url}")
 
 
-def fixstr(str, n=64):
+def fixstr(str, n=80):
     """
     if str is longer than n, return first n characters
     if str is shorter than n, return str with spaces added to end
@@ -405,46 +459,130 @@ def fixstr(str, n=64):
 mb = 1024 * 1024
 
 
-def optimize_image(path, max_mb=1):
+def optimize_image(path, out=None, max_size=1*mb, max_width=None, max_height=None):
+    """
+    Note: This only supports PNGs at the moment
+
+    max_size: maximum size in bytes - pass None to skip this check
+    max_width: maximum width in pixels - pass None to skip this check
+    max_height: maximum height in pixels - pass None to skip this check
+
+    If max_width or max_height is specified, the image will be resized again if necessary
+
+    returns:
+    - 0. True / False: whether the image was optimized
+    - 1. The space saved in bytes
+    - 2. The "A" width and height of the image
+    - 3. The "new" width and height of the image
+    - 4. The scale factor used to resize the image
+    """
+    # validate inputs
+    # either max_size or max_width or max_height must be specified
+    if max_size is None and max_width is None and max_height is None:
+        raise ValueError(
+            "Either max_size or max_width or max_height must be specified")
+
+    if out is None:
+        out = path
+
+    optimization_data = read_png_optimization_metadata(path)
+    ext = os.path.splitext(path)[1].lower()
+    target_ext = 'png'
+
+    if ext in ['.png', '.jpg', '.jpeg']:
+        # we convert everything to png
+        target_ext = 'png'
+    elif ext in ['.gif']:
+        # not supported
+        return False, 0, 0, 0, 0
+
     margin = 0.3
     try:
-        startsize = os.path.getsize(path)
-        max_size = max_mb * mb
-        # Check if the image is already smaller than the target size
-        if startsize <= max_size:
-            return None, None
-        target_bytes = max_size - (margin * mb)
         # Open the image
         img = Image.open(path)
-        # Calculate the current number of bytes
-        current_bytes = io.BytesIO()
-        img.save(current_bytes, format='PNG')
-        current_bytes = current_bytes.tell()
-        if current_bytes > max_size:
-            # Calculate the scale factor
-            scale_factor = math.sqrt(target_bytes / current_bytes)
-            # Calculate the new size
-            new_size = tuple(int(dim * scale_factor) for dim in img.size)
-            # Resize the image
-            img = img.resize(new_size, resample=Image.BICUBIC)
+
+        if optimization_data is not None:
+            a_size = optimization_data['size']['a']
+            a_w, a_h = optimization_data['dimensions']['a']
+        else:
+            a_size = os.path.getsize(path)
+            # current dimensions
+            a_w, a_h = img.size
+
+        new_size = (a_w, a_h)
+
+        targetsize = max_size - \
+            (margin * mb) if max_size is not None else float('inf')
+
+        scale_factor_a = math.sqrt(
+            targetsize / a_size) if max_size is not None and a_size > max_size else 1
+
+        # If either max_width or max_height is specified, resize the image while preserving aspect ratio
+        w_scale = max_width / a_w if max_width else float('inf')
+        h_scale = max_height / a_h if max_height else float('inf')
+        scale_factor_b = min(w_scale, h_scale)
+
+        scale_factor = min(scale_factor_a, scale_factor_b)
+
+        if scale_factor < 1:  # Only resize if new size is smaller
+            new_size = (int(a_w * scale_factor), int(a_h * scale_factor))
+            img = img.resize(new_size)
+
         # Save the image to a temporary file
-        with tempfile.NamedTemporaryFile(mode='wb', suffix='.png', delete=False) as tmp:
-            img.save(tmp.name, format='PNG')
-            # Remove the original file before copying the temporary file
-
+        with tempfile.NamedTemporaryFile(mode='wb', suffix=f'.{target_ext}', delete=False) as tmp:
+            img.save(tmp.name,
+                     format=target_ext,
+                     optimize=True,
+                     pnginfo=png_optimization_metadata(a_w, a_h, a_size))
             # double check if it actually got smaller
-            if os.path.getsize(tmp.name) > startsize:
-                return False, 0
-
+            if os.path.getsize(tmp.name) >= a_size:
+                os.remove(tmp.name)
+                return False, 0, (a_w, a_h), (a_w, a_h), 1
             # Remove the original file before moving the temporary file to the original filename
             os.remove(path)
-            shutil.move(tmp.name, path)
-        endsize = os.path.getsize(path)
-        saved = startsize - endsize
-        return True, saved
+            shutil.move(tmp.name, out)
+        endsize = os.path.getsize(out)
+        saved = a_size - endsize
+
+        return True, saved, (a_w, a_h), new_size, scale_factor
     except Exception as e:
         tqdm.write(f"☒ Error optimizing {path}: {e}")
-        return False, 0
+        return False, 0, None, None, None
+
+
+def png_optimization_metadata(aW, aH, aS):
+    metadata = PngInfo()
+    # save compressed text info
+    # AD stands for "A dimensions - original dimensions"
+    metadata.add_text('AD', f'{aW}x{aH}')
+    # AS stands for "A size - original size in bytes"
+    metadata.add_text('AS', f'{aS}')
+    return metadata
+
+
+def read_png_optimization_metadata(path):
+    img = Image.open(path)
+    metadata = img.info
+    aD = metadata.get('AD', None)
+    aW = int(aD.split('x')[0]) if aD else None
+    aH = int(aD.split('x')[1]) if aD else None
+    aS = metadata.get('AS', None)
+    aS = float(aS) if aS else None
+    img.close()
+
+    if aD is None:
+        return None
+
+    return {
+        'dimensions': {
+            'a': (aW, aH),
+            'b': img.size,
+        },
+        'size': {
+            'a': aS,
+            'b': os.path.getsize(path),
+        },
+    }
 
 
 def fetch_file_images(file_key, token):
@@ -594,40 +732,6 @@ def log_error(msg, print=False):
         ...
 
 
-def save_optimization_info(root_dir, key, image, optimization):
-    """
-    TODO:
-    """
-    path = Path(root_dir) / key / "images"
-    metadata = path / "meta.json"  # would be /:filekey/exports/meta.json
-    is_new = not metadata.exists()
-    # read the metadata
-    with open(metadata, "w+") as f:
-        try:
-            olddata = json.load(f) if not is_new else {}
-        except json.JSONDecodeError:
-            olddata = {}
-
-        data = {
-            **olddata,
-            "optimization": {
-                **(olddata["optimization"] if "optimization" in olddata else {}),
-                # saves the scale factor (if optimized)
-                [image]: {
-                    "scale": optimization["scale"],
-                    "original": {
-                        "size": optimization["original_size"],
-                        "width": optimization["original_width"],
-                        "height": optimization["original_height"],
-                    },
-                    "loss": optimization["loss"]
-                }
-            }
-        }
-        json.dump(data, f, separators=(',', ':'))
-        f.close()
-
-
 def sync_metadata_for_hash_images(root_dir, src_dir, key):
     """
     syncs the meta.json file for the hash images
@@ -639,27 +743,48 @@ def sync_metadata_for_hash_images(root_dir, src_dir, key):
     document = read_file_data(Path(src_dir) / f"{key}.json")
     if not document:
         return
-    
-    metadata: Path = path / "meta.json"  # would be /:filekey/exports/meta.json
-    try:
-        files = [Path(file) for file in filter_graphic_files(os.listdir(path))]
-    except FileNotFoundError:
-        files = []
+
+    metafile: Path = path / "meta.json"  # would be /:filekey/exports/meta.json
+    files = [Path(file) for file in get_existing_images(path)]
+
     hashes = [file.stem for file in files]
 
-    is_new = not metadata.exists()
+    is_new = not metafile.exists()
     # save the info file
-    with open(metadata, "w+") as f:
+    with open(metafile, "w+") as f:
         try:
             olddata = json.load(f) if not is_new else {}
         except json.JSONDecodeError:
             olddata = {}
 
         images = {}
+        optimization = {}
+        dimensions = {}
         for hash_ in hashes:
             # hash : file
             file = [file for file in files if file.stem == hash_][0]
+            ext = file.suffix
             images[hash_] = file.name
+            if ext == ".png":
+                data = read_png_optimization_metadata(path / file)
+                if not data:
+                    continue
+
+                d = data["dimensions"]
+                s = data["size"]
+                _ad = d['a']
+                _bd = d['b']
+                _as = s['a']
+                _bs = s['b']
+                _aw, _ah = _ad
+                _bw, _bh = _bd
+                dimensions[hash_] = [_aw, _ah]
+                optimization[hash_] = {
+                    hash_: {
+                        "dimensions": [_bw, _bh],
+                        "saved": (_as - _bs if _as is not None and _bs is not None else None)
+                    }
+                }
 
         data = {
             **olddata,
@@ -670,9 +795,20 @@ def sync_metadata_for_hash_images(root_dir, src_dir, key):
             },
             # the last mod date of the meta file (a.k.a last archived)
             "archivedAt": datetime.now().isoformat(),
-            "meta": {
-                "images": images
+            # images map hash to file name
+            "images": images,
+            # original
+            "dimensions": {
+                # hash: [width, height]
+                **dimensions
             },
+            "optimization": {
+                # hash: {
+                #   dimensions: [width, height],
+                #   saved: 0.0, # in bytes
+                # }
+                **optimization
+            }
         }
 
         json.dump(data, f, separators=(',', ':'))
@@ -691,17 +827,14 @@ def sync_metadata_for_exports(root_dir, src_dir, key):
     document = read_file_data(Path(src_dir) / f"{key}.json")
     if not document:
         return
-    
-    metadata = path / "meta.json"  # would be /:filekey/exports/meta.json
+
+    metafile = path / "meta.json"  # would be /:filekey/exports/meta.json
 
     ids, depths, maxdepth = get_node_ids_and_depths(
         document, depth=None, include_canvas=True)  # get all ids
 
     # filter out only graphic files
-    try:
-        exports = filter_graphic_files(os.listdir(path))
-    except FileNotFoundError:
-        exports = []
+    exports = get_existing_images(path)
 
     node_exports = {}
     for id_ in ids:
@@ -758,7 +891,7 @@ def sync_metadata_for_exports(root_dir, src_dir, key):
     }
 
     # save the info file
-    with open(metadata, "w") as f:
+    with open(metafile, "w") as f:
         json.dump(data, f, separators=(',', ':'))
         f.close()
 
@@ -845,9 +978,239 @@ def get_node_ids_and_depths(data, depth=None, include_canvas=False, types=None):
 
 def get_existing_images(images_dir):
     try:
-        return set(os.listdir(images_dir))
+        return set(filter_graphic_files(os.listdir(images_dir)))
     except FileNotFoundError:
         return set()
+
+
+def get_node_dimensions(node):
+    """
+    Extract the width and height from a node's transformation matrix.
+
+    Parameters:
+    node: A document tree node.
+
+    Returns:
+    Tuple of width and height. (scale is applied to the original size)
+
+    Note: this is not considered as "absolute" transform since it does not iterates through the parents' relativeTransform.
+    """
+
+    # Get the transformation matrix
+    transform = node['relativeTransform']
+
+    # The scaling factors are at positions [0][0] and [1][1]
+    width_scale = transform[0][0]
+    height_scale = transform[1][1]
+
+    # The width and height are the scaling factors multiplied by the original size
+    width = width_scale * node['size']['x']
+    height = height_scale * node['size']['y']
+
+    return width, height
+
+
+def optimized_image_paint_map(paint_map, images: dict):
+    """
+    Create a map that shows each hash image's usage in a document and the nodes that use it, along with the paint object.
+    Plus, it also returns a "max" property for each hash image, which is the maximum size of the image used in the document.
+    We can use max property to resize the image as so (if the original image is bigger than max), without losing quality.
+
+    Parameters:
+    node: A document tree node.
+    images: A dictionary mapping image hashes to local directory path (original file, without any optimizations).
+    """
+
+    # TODO: validate this with testing
+    def calculate_fit_size(nodesize, imgsize):
+        """
+        Calculate the size of the image when the scale mode is FIT.
+        FIT means the image will be scaled up or down to fit within the size of the node, while maintaining the aspect ratio.
+        """
+        iw, ih = imgsize
+        node_width, node_height = nodesize
+        width_ratio = node_width / iw
+        height_ratio = node_height / ih
+        ratio = min(width_ratio, height_ratio)
+
+        return iw * ratio, ih * ratio
+
+    # TODO: validate this with testing
+    def calculate_fill_size(nodesize, imgsize):
+        """
+        Calculate the size of the image when the scale mode is FILL.
+        FILL means the image will be scaled up or down to cover the whole node, while maintaining the aspect ratio.
+        """
+        iw, ih = imgsize
+        node_width, node_height = nodesize
+        width_ratio = node_width / iw
+        height_ratio = node_height / ih
+        ratio = max(width_ratio, height_ratio)
+
+        return iw * ratio, ih * ratio
+
+    # TODO: validate this with testing
+    def calculate_tile_size(imgsize, scaling_factor):
+        """
+        Calculate the size of the image when the scale mode is TILE.
+        TILE means the image will be repeated across the node.
+        """
+        iw, ih = imgsize
+
+        # For tiling, we need to ensure the size of the individual tile,
+        # i.e., the image size after applying the scaling factor.
+        tile_width = iw * scaling_factor
+        tile_height = ih * scaling_factor
+
+        return tile_width, tile_height
+
+    # TODO: validate this with testing
+    def calculate_stretch_size(imgsize, image_transform, rotation, relativeTransform):
+        """
+        Calculate the size of an image with the STRETCH scale mode.
+
+        Parameters:
+        node: A dictionary representing the node, with the keys "w" and "h" representing the width and height of the node, respectively.
+        image_transform: A 2D array representing the affine transform applied to the image.
+        rotation: A float representing the rotation of the image, in degrees.
+
+        Returns:
+        A tuple (width, height) representing the size of the image.
+        """
+        iw, ih = imgsize
+
+        # Convert the image transform and relativeTransform to Numpy arrays.
+        image_transform = np.array(image_transform)
+        relativeTransform = np.array(relativeTransform)
+
+        # Convert the rotation from degrees to radians.
+        rotation = np.deg2rad(rotation)
+        rotation_matrix = np.array([
+            [np.cos(rotation), -np.sin(rotation)],
+            [np.sin(rotation), np.cos(rotation)]
+        ])
+
+        # Compute inverse of the rotation_matrix
+        inv_rotation_matrix = np.linalg.inv(rotation_matrix)
+
+        # Combine the image transform with the rotation.
+        image_transform_rotated = np.dot(
+            image_transform[:, :2], rotation_matrix)
+        image_transform_rotated = np.hstack(
+            [image_transform_rotated, image_transform[:, 2, np.newaxis]])
+
+        # the final transform - image_transform (rotation applied) * relativeTransform (node transform)
+        transform = np.dot(image_transform_rotated[:, :2], inv_rotation_matrix)
+        transform = np.hstack(
+            [transform, image_transform_rotated[:, 2, np.newaxis]])
+
+        # Apply the transform to the size of the node.
+        rendersize = np.dot(transform[:, :2], [iw, ih])
+        rw, rh = rendersize
+
+        # The size might not be integer values after applying the transform, so we take the absolute value and round up to the nearest integer.
+        width = np.ceil(np.abs(rw))
+        height = np.ceil(np.abs(rh))
+
+        return width, height
+
+    for hash_image, info in paint_map.items():
+        max_width = 0
+        max_height = 0
+        original_image_path = images[hash_image]
+
+        # Read original image size
+        with Image.open(original_image_path) as img:
+            imgsize = img.size
+            ow, oh = imgsize
+
+        for usage in info["usage"]:
+            id = usage["id"]
+            paint = usage["paint"]
+            node = info["nodes"][id]
+            # Note: this is not considered as "absolute" transform since it does not iterates through the parents' relativeTransform.
+            relativeTransform = node["relativeTransform"]
+            nodesize = get_node_dimensions(node)
+
+            scale_mode = paint["scaleMode"]
+
+            if scale_mode == "FIT":
+                width, height = calculate_fit_size(
+                    nodesize=nodesize, imgsize=imgsize)
+            elif scale_mode == "FILL":
+                width, height = calculate_fill_size(
+                    nodesize=nodesize, imgsize=imgsize)
+            elif scale_mode == "TILE":
+                scaling_factor = paint["scalingFactor"]
+                width, height = calculate_tile_size(
+                    imgsize=imgsize, scaling_factor=scaling_factor)
+            elif scale_mode == "STRETCH":
+                image_transform = paint["imageTransform"]
+                rotation = paint.get("rotation", 0)
+                width, height = calculate_stretch_size(
+                    imgsize, image_transform, rotation, relativeTransform)
+            else:
+                raise ValueError(f"Unsupported scale mode: {scale_mode}")
+
+            # Compare with original image size, we cannot have an image bigger than the original
+            width = min(ow, width)
+            height = min(oh, height)
+
+            max_width = max(max_width, width)
+            max_height = max(max_height, height)
+
+        info["max"] = {
+            "width": max_width,
+            "height": max_height,
+        }
+
+    return paint_map
+
+
+def image_paint_map(node):
+    """
+    Create a map that shows where each image hash is used in a document.
+
+    Parameters:
+    node: The current node in the document tree.
+
+    Returns:
+    A dictionary mapping each hash to a list of dictionaries, each containing the id, and the fill object of a node where the hash is used.
+    """
+    map = {}
+
+    # If the node has fills, check them for image references
+    if "fills" in node:
+        for fill in node["fills"]:
+            if "imageRef" in fill:
+                # This fill includes an image reference, so we record this node
+                if fill["imageRef"] not in map:
+                    map[fill["imageRef"]] = {"usage": [], "nodes": {}}
+
+                # Append usage and nodes if not already present
+                map[fill["imageRef"]]["usage"].append(
+                    {"id": node["id"], "paint": fill})
+                if node["id"] not in map[fill["imageRef"]]["nodes"]:
+                    map[fill["imageRef"]]["nodes"][node["id"]] = {
+                        "type": node["type"],
+                        "relativeTransform": node["relativeTransform"],
+                        "size": node["size"],
+                    }
+
+    # Recurse into the children of this node, if it has any
+    if "children" in node:
+        for child in node["children"]:
+            child_map = image_paint_map(child)
+            # Merge the child's map into our map
+            for hash, data in child_map.items():
+                if hash not in map:
+                    map[hash] = {"usage": [], "nodes": {}}
+
+                # Merge usage and nodes lists
+                map[hash]["usage"].extend(data["usage"])
+                map[hash]["nodes"].update(data["nodes"])
+
+    return map
 
 
 def chunked_zips(a: list, b: list, n: int) -> List[zip]:
@@ -889,6 +1252,8 @@ def chunked_list(a: list, n: int) -> List[zip]:
 GRAPHIC_FORMATS = [
     ".png",
     ".jpg",
+    ".jpeg",
+    ".gif"
     ".svg",
     ".pdf",
 ]
