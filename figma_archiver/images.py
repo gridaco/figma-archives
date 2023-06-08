@@ -24,11 +24,12 @@ from functools import partial
 import queue
 from typing import List, Callable
 import resource
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from PIL.PngImagePlugin import PngInfo
 from datetime import datetime
 import math
 import logging
+from colorama import Fore
 import numpy as np
 
 # TODO: gifRef support
@@ -256,8 +257,9 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                             }
                         )
 
-                        max_width = opt[hash]["max"]["width"]
-                        max_height = opt[hash]["max"]["height"]
+                        max_width = opt[hash].get("max", {}).get("width", None)
+                        max_height = opt[hash].get(
+                            "max", {}).get("height", None)
 
                         if optimize:
                             success, saved, dimA, dimB, scale = optimize_image(
@@ -270,7 +272,10 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                                 aw, ah = dimA
                                 bw, bh = dimB
                                 tqdm.write(
-                                    f"☑ {fixstr(f'(optimized) {(saved / mb):.2f}MB @x{scale:.2f} {aw}x{ah} → {bw}x{bh} (max: {int(max_width)}x{int(max_height)} | {max_mb_hash}mb) {hash} ...')} → {path}")
+                                    Fore.BLUE +
+                                    f"☑ {fixstr(f'(optimized) {(saved / mb):.2f}MB @x{scale:.2f} {aw}x{ah} → {bw}x{bh} (max: {int(max_width)}x{int(max_height)} | {max_mb_hash}mb) {hash} ...')} → {path}"
+                                    + Fore.RESET
+                                )
 
                     # we don't use queue for has images
                     fetch_and_save_image_fills(
@@ -325,9 +330,9 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                     # tqdm.write(f"{images_dir} - Layer images already fetched")
                     ...
 
-            tqdm.write(f"☑ {subdir}")
+            tqdm.write(Fore.GREEN + f"☑ {subdir}" + Fore.RESET)
         else:
-            tqdm.write(f"☒ {subdir}")
+            tqdm.write(Fore.RED + f"☒ {subdir}" + Fore.RESET)
         pbar.update(1)
 
 
@@ -374,10 +379,10 @@ def download(url, output_path: str, timeout=10):
             log_error(f"☒ {fixstr(f'Forbidden (Expired): {url}')}", print=True)
             return None, None
         else:
-            tqdm.write(f"☒ Error {e} while downloading {url}")
+            tqdm.write(Fore.YELLOW + f"☒ Error {e} while downloading {url}")
             return None, None
     except Exception as e:
-        tqdm.write(f"☒ Error {e} while downloading {url}")
+        tqdm.write(Fore.YELLOW + f"☒ Error {e} while downloading {url}")
         return None, None
 
 
@@ -448,11 +453,12 @@ def fetch_and_save_image_fills(url_and_path_pairs, optimizer: Optimizer, positio
         for future in futures:
             url, downloaded_path = future.result()
             if downloaded_path:
-                tqdm.write(f"☑ {fixstr(url)} → {downloaded_path}")
+                tqdm.write(
+                    Fore.WHITE + f"☑ {fixstr(url)} → {downloaded_path}" + Fore.RESET)
                 if optimizer is not None:
                     optimizer(downloaded_path)
             else:
-                tqdm.write(f"Failed to download image: {url}")
+                tqdm.write(Fore.YELLOW + f"Failed to download image: {url}")
 
 
 def fixstr(str, n=80):
@@ -595,7 +601,11 @@ def png_optimization_metadata(aW, aH, aS):
 
 
 def read_png_optimization_metadata(path):
-    img = Image.open(path)
+    try:
+        img = Image.open(path)
+    except (UnidentifiedImageError, OSError) as e:
+        log_error(f"☒ Error reading {path}: {e}", print=True)
+        return None
     metadata = img.info
     aD = metadata.get('AD', None)
     aW = int(aD.split('x')[0]) if aD else None
@@ -620,7 +630,11 @@ def read_png_optimization_metadata(path):
 
 
 def read_jpg_optimization_metadata(path):
-    img = Image.open(path)
+    try:
+        img = Image.open(path)
+    except (UnidentifiedImageError, OSError) as e:
+        log_error(f"☒ Error reading {path}: {e}", print=True)
+        return None
     exif = img.getexif()
     # 0x9286 is the exif tag for user comment
     data = exif.get(0x9286, None)
@@ -716,8 +730,8 @@ def fetch_node_images(file_key, ids, scale, format, token, position, conncurrenc
             if retry >= max_retry:
                 log_error(
                     f"Error fetching [{(','.join(chunk))}] layer images. Rate limit exceeded.")
-                tqdm.write(
-                    f"☒ HTTP429 - Rate limit exceeded. ({max_retry} tries)")
+                tqdm.write(Fore.YELLOW +
+                           f"☒ HTTP429 - Rate limit exceeded. ({max_retry} tries)")
                 return {}
 
             # check if retry-after header is present
@@ -728,6 +742,7 @@ def fetch_node_images(file_key, ids, scale, format, token, position, conncurrenc
             if max_retry - retry < 2:
                 # only show the last retry message
                 tqdm.write(
+                    Fore.YELLOW +
                     f"☒ HTTP429 - Waiting {retry_after} seconds before retrying...  ({retry + 1}/{max_retry})")
             time.sleep(retry_after)
             return fetch_images_chunk(chunk, retry=retry + 1)
@@ -780,7 +795,7 @@ def calculate_program():
 def log_error(msg, print=False):
     try:
         if print:
-            tqdm.write(msg)
+            tqdm.write(Fore.RED + msg)
 
         logging.error(msg)
     except Exception as e:
@@ -1052,14 +1067,19 @@ def get_node_dimensions(node):
 
     # Get the transformation matrix
     transform = node['relativeTransform']
+    size = node['size']
+
+    if transform is None or size is None:
+        raise ValueError(
+            f"Node {node['id']} is missing either relativeTransform or size")
 
     # The scaling factors are at positions [0][0] and [1][1]
     width_scale = transform[0][0]
     height_scale = transform[1][1]
 
     # The width and height are the scaling factors multiplied by the original size
-    width = width_scale * node['size']['x']
-    height = height_scale * node['size']['y']
+    width = width_scale * size['x']
+    height = height_scale * size['y']
 
     return width, height
 
@@ -1174,9 +1194,13 @@ def optimized_image_paint_map(paint_map, images: dict):
         original_image_path = images[hash_image]
 
         # Read original image size
-        with Image.open(original_image_path) as img:
-            imgsize = img.size
-            ow, oh = imgsize
+        try:
+            with Image.open(original_image_path) as img:
+                imgsize = img.size
+                ow, oh = imgsize
+        except (UnidentifiedImageError, OSError):
+            log_error(f"Cannot read image {original_image_path}. Skipping...")
+            continue
 
         for usage in info["usage"]:
             id = usage["id"]
@@ -1184,7 +1208,11 @@ def optimized_image_paint_map(paint_map, images: dict):
             node = info["nodes"][id]
             # Note: this is not considered as "absolute" transform since it does not iterates through the parents' relativeTransform.
             relativeTransform = node["relativeTransform"]
-            nodesize = get_node_dimensions(node)
+            try:
+                nodesize = get_node_dimensions(node)
+            except ValueError as e:
+                log_error(f'Invalid node value - {e}')
+                continue
 
             scale_mode = paint["scaleMode"]
 
