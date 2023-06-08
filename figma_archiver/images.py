@@ -82,12 +82,26 @@ BOTTOM_POSITION = 32
 @click.option("--no-download", is_flag=True, help="No downloading the images (This can be used if you want this script to only run for optimizing existing images)", default=0, type=int)
 @click.option("--shuffle", is_flag=True, help="Rather if to randomize the input for even distribution", default=False, type=click.BOOL)
 @click.option("--sample", default=None, help="Sample n files from the input", type=click.INT)
-def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize, no_exports, max_mb_hash, types, thumbnails, only_thumbnails, only_sync, figma_token, source_dir, concurrency, skip_n, no_download, shuffle, sample):
+@click.option("--hide-progress", help="Hide progress bar", default=None, type=click.Choice([True, False, None, "*", "c"]))
+def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize, no_exports, max_mb_hash, types, thumbnails, only_thumbnails, only_sync, figma_token, source_dir, concurrency, skip_n, no_download, shuffle, sample, hide_progress):
+
+    # progress display config
+    hide_progress_main = False
+    hide_progress_c = False
+    if hide_progress is not None:
+        if hide_progress == "*":
+            hide_progress_main = True
+            hide_progress_c = True
+        elif hide_progress == "c":
+            hide_progress_c = True
+        else:
+            hide_progress_main = True
+            hide_progress_c = True
 
     # Get current limit
     soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
 
-    print(f'Soft limit starts as: {soft_limit}')
+    click.echo(f'Soft limit starts as: {soft_limit}')
     # Try to update the limit
     resource.setrlimit(resource.RLIMIT_NOFILE,
                        ((concurrency + 1) * 64 * 2, hard_limit))
@@ -95,11 +109,14 @@ def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize,
     # Verify it now
     soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
 
-    print(f'Soft limit changed to: {soft_limit}')
+    click.echo(f'Soft limit changed to: {soft_limit}')
 
     # progress bar position config
     global BOTTOM_POSITION
-    BOTTOM_POSITION = concurrency * 3 + 4
+
+    cbars = 0 if hide_progress_c else (2 if not no_fills else 1)
+
+    BOTTOM_POSITION = 2 + 2 + (concurrency * cbars) + 4
 
     if only_thumbnails:
         if thumbnails:
@@ -158,7 +175,7 @@ def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize,
     if not only_sync:
         # main progress bar
         pbar = tqdm(total=len(json_files),
-                    position=BOTTOM_POSITION, leave=True)
+                    position=BOTTOM_POSITION, leave=True, disable=hide_progress_main)
 
         chunks = chunked_zips(file_keys, json_files, n=concurrency)
         threads: list[threading.Thread] = []
@@ -188,7 +205,8 @@ def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize,
                 'index': _,
                 'pbar': pbar,
                 'no_download': no_download,
-                'concurrency': concurrency
+                'concurrency': concurrency,
+                'hide_progress': hide_progress_c
             })
             t.start()
             threads.append(t)
@@ -213,14 +231,15 @@ def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize,
         tqdm.write(f"🔥 {root_dir/key}")
 
 
-def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, include_canvas: bool, no_fills: bool, no_exports: bool, thumbnails: bool, types: list[str], figma_token: str, format: str, scale: int, optimize: bool, max_mb_hash: int, depth: int, index: int, size: int, pbar: tqdm, concurrency: int, no_download: bool):
+def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, include_canvas: bool, no_fills: bool, no_exports: bool, thumbnails: bool, types: list[str], figma_token: str, format: str, scale: int, optimize: bool, max_mb_hash: int, depth: int, index: int, size: int, pbar: tqdm, concurrency: int, no_download: bool, hide_progress: bool):
     # for key, json_file in files:
-    for key, json_file in tqdm(files, desc=f"⚡️ {figma_token[:8]}", position=BOTTOM_POSITION-(index+4), leave=True, total=size):
+    for key, json_file in tqdm(files, desc=f"⚡️ {figma_token[:8]}", position=BOTTOM_POSITION-(index+4), leave=True, total=size, disable=hide_progress):
         subdir: Path = root_dir / key
         subdir.mkdir(parents=True, exist_ok=True)
 
         json_file = src_dir / Path(json_file)
         file_data = read_file_data(json_file)
+        skipped = True
 
         if file_data:
             if depth is not None:
@@ -230,6 +249,7 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                 if not (subdir / "thumbnail.png").is_file() and not no_download:
                     thumbnail_url = file_data["thumbnailUrl"]
                     download(thumbnail_url, subdir / "thumbnail.png")
+                    skipped = False
                     # tqdm.write(f"Saved thumbnail to {subdir / 'thumbnail.png'}")
 
             node_ids, depths, maxdepth = get_node_ids_and_depths(
@@ -293,12 +313,14 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                                 #     f"☑ {fixstr(f'(optimized) {(saved / mb):.2f}MB @x{scale:.2f} {aw}x{ah} → {bw}x{bh} (max: {int(max_width) if max_width is not None else 0}x{int(max_height) if max_height is not None else 0} | {max_mb_hash}mb) {hash} ...')} → {path}"
                                 #     + Fore.RESET
                                 # )
-
-                    # we don't use queue for has images
-                    fetch_and_save_image_fills(
-                        file_key=key, url_and_path_pairs=url_and_path_pairs, optimizer=optimizer,
-                        position=BOTTOM_POSITION-(index+6+concurrency)
-                    )
+                    if len(url_and_path_pairs) > 0:
+                        # we don't use queue for has images
+                        fetch_and_save_image_fills(
+                            file_key=key, url_and_path_pairs=url_and_path_pairs, optimizer=optimizer,
+                            position=BOTTOM_POSITION-(index+6+concurrency),
+                            hide_progress=hide_progress
+                        )
+                        skipped = False
                     # for pair in url_and_path_pairs:
                     #   img_queue.put(pair + (optimizer,))
                 else:
@@ -345,11 +367,12 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                     ]
                     for pair in url_and_path_pairs:
                         img_queue.put(pair + (None,))
+                    skipped = False
                 else:
                     # tqdm.write(f"{images_dir} - Layer images already fetched")
                     ...
-
-            tqdm.write(Fore.GREEN + f"☑ {subdir}" + Fore.RESET)
+            color = Fore.YELLOW if skipped else Fore.GREEN
+            tqdm.write(color + f"☑ {subdir}" + Fore.RESET)
         else:
             tqdm.write(Fore.RED + f"☒ {subdir}" + Fore.RESET)
         pbar.update(1)
@@ -476,14 +499,14 @@ PostProcessor = Callable[[str], None]
 Optimizer = PostProcessor
 
 
-def fetch_and_save_image_fills(file_key, url_and_path_pairs, optimizer: Optimizer, position=4, num_threads=64):
+def fetch_and_save_image_fills(file_key, url_and_path_pairs, optimizer: Optimizer, position=4, num_threads=64, hide_progress=False):
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
         futures = {executor.submit(download, url, path): (
             url, path) for url, path in url_and_path_pairs}
 
         if position is not None:
             futures = tqdm(as_completed(futures), total=len(
-                futures), desc=f"📷 {file_key[:5]} (C{num_threads})", position=position, leave=False)
+                futures), desc=f"📷 {file_key[:5]} (C{num_threads})", position=position, leave=False, disable=hide_progress)
         else:
             futures = as_completed(futures)
 
