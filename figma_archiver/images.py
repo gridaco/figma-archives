@@ -28,11 +28,22 @@ from PIL import Image
 from PIL.PngImagePlugin import PngInfo
 from datetime import datetime
 import math
-import io
+import logging
 import numpy as np
 
 # TODO: gifRef support
-# TODO: ext support with mimetype
+
+
+# configure logging
+logging.basicConfig(
+    level=logging.WARN,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler("figma_archiver.log"),
+        logging.StreamHandler()
+    ]
+)
+
 
 resource.setrlimit(
     resource.RLIMIT_CORE,
@@ -558,7 +569,7 @@ def optimize_image(path, out=None, max_size=1*mb, max_width=None, max_height=Non
 
         return True, saved, (a_w, a_h), new_size, scale_factor
     except Exception as e:
-        tqdm.write(f"☒ Error optimizing {path}: {e}")
+        log_error(f"☒ Error optimizing {path}: {e}", print=True)
         return False, 0, None, None, None
 
 
@@ -771,16 +782,7 @@ def log_error(msg, print=False):
         if print:
             tqdm.write(msg)
 
-        # check if err log file exists
-        err_log_file = Path("err.log")
-        if not err_log_file.exists():
-            with open(err_log_file, "w") as f:
-                f.write("")
-                f.close()
-
-        with open(err_log_file, "a") as f:
-            f.write(msg + "\n")
-            f.close()
+        logging.error(msg)
     except Exception as e:
         ...
 
@@ -970,7 +972,7 @@ def read_file_data(file: Path):
                 ...
             return None
     else:
-        tqdm.write(f"File {file} not found")
+        log_error(f"File {file} not found", print=True)
         return None
 
 
