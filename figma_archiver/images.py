@@ -1117,6 +1117,13 @@ def get_node_dimensions(node):
         raise ValueError(
             f"Node {node['id']} is missing either relativeTransform or size")
 
+    x = size['x']
+    y = size['y']
+
+    if x is None or y is None:
+        raise ValueError(
+            f"Node {node['id']} is missing either size.x or size.y")
+
     # The scaling factors are at positions [0][0] and [1][1]
     width_scale = transform[0][0]
     height_scale = transform[1][1]
