@@ -245,22 +245,24 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                             }
                         )
 
-                        out = os.path.join(images_dir, hash+'.png')
                         max_width = opt[hash]["max"]["width"]
                         max_height = opt[hash]["max"]["height"]
 
-                        if max_mb_hash is not None and max_mb_hash > 0:
+                        if optimize:
                             success, saved, dimA, dimB, scale = optimize_image(
                                 path=path,
-                                out=out,
-                                max_size=max_mb_hash*mb,
+                                max_size=(
+                                    max_mb_hash*mb) if max_mb_hash else None,
                                 max_width=max_width, max_height=max_height
                             )
-                            if (success):
+                            if success:
                                 aw, ah = dimA
                                 bw, bh = dimB
                                 tqdm.write(
-                                    f"☑ {fixstr(f'(optimized) {(saved / mb):.2f}MB @x{scale:.2f} {aw}x{ah} → {bw}x{bh} (max: {int(max_width)}x{int(max_height)} | {max_mb_hash}mb) {hash} ...')} → {out}")
+                                    f"☑ {fixstr(f'(optimized) {(saved / mb):.2f}MB @x{scale:.2f} {aw}x{ah} → {bw}x{bh} (max: {int(max_width)}x{int(max_height)} | {max_mb_hash}mb) {hash} ...')} → {path}")
+                            else:
+                                tqdm.write(
+                                    f"☒ {fixstr(f'(optimized) {hash}')} → {path}")
 
                     # we don't use queue for has images
                     fetch_and_save_image_fills(
@@ -485,14 +487,14 @@ def optimize_image(path, out=None, max_size=1*mb, max_width=None, max_height=Non
     if out is None:
         out = path
 
-    optimization_data = read_png_optimization_metadata(path)
+    optimization_data = read_image_optimization_metadata(path)
     ext = os.path.splitext(path)[1].lower()
-    target_ext = 'png'
 
-    if ext in ['.png', '.jpg', '.jpeg']:
-        # we convert everything to png
+    if ext == '.png':
         target_ext = 'png'
-    elif ext in ['.gif']:
+    elif ext == '.jpg' or ext == '.jpeg':
+        target_ext = 'jpg'
+    else:
         # not supported
         return False, 0, 0, 0, 0
 
@@ -530,10 +532,23 @@ def optimize_image(path, out=None, max_size=1*mb, max_width=None, max_height=Non
 
         # Save the image to a temporary file
         with tempfile.NamedTemporaryFile(mode='wb', suffix=f'.{target_ext}', delete=False) as tmp:
-            img.save(tmp.name,
-                     format=target_ext,
-                     optimize=True,
-                     pnginfo=png_optimization_metadata(a_w, a_h, a_size))
+            metadata = a_w, a_h, a_size
+            if target_ext == 'png':
+                img.save(tmp.name,
+                         format='PNG',
+                         optimize=True,
+                         pnginfo=png_optimization_metadata(*metadata))
+            elif target_ext == 'jpg':
+                exif = img.getexif()
+                # 0x9286 is the exif tag for user comment
+                exif[0x9286] = jpg_optimization_metadata(*metadata)
+                img.save(tmp.name,
+                         format='JPEG',
+                         optimize=True,
+                         exif=exif)
+            else:
+                raise ValueError(f"Unsupported image format: {target_ext}")
+
             # double check if it actually got smaller
             if os.path.getsize(tmp.name) >= a_size:
                 os.remove(tmp.name)
@@ -548,6 +563,17 @@ def optimize_image(path, out=None, max_size=1*mb, max_width=None, max_height=Non
     except Exception as e:
         tqdm.write(f"☒ Error optimizing {path}: {e}")
         return False, 0, None, None, None
+
+
+def read_image_optimization_metadata(path):
+    path = Path(path)
+    ext = path.suffix.lower()
+    if ext == '.png':
+        return read_png_optimization_metadata(path)
+    elif ext == '.jpg' or ext == '.jpeg':
+        return read_jpg_optimization_metadata(path)
+    else:
+        raise ValueError(f"Unsupported file extension: {ext}")
 
 
 def png_optimization_metadata(aW, aH, aS):
@@ -583,6 +609,36 @@ def read_png_optimization_metadata(path):
             'b': os.path.getsize(path),
         },
     }
+
+
+def read_jpg_optimization_metadata(path):
+    img = Image.open(path)
+    exif = img.getexif()
+    # 0x9286 is the exif tag for user comment
+    data = exif.get(0x9286, None)
+    img.close()
+    try:
+        data = json.loads(data)
+        return {
+            'dimensions': {
+                'a': (data['AW'], data['AH']),
+                'b': img.size,
+            },
+            'size': {
+                'a': data['AS'],
+                'b': os.path.getsize(path),
+            },
+        }
+    except:
+        return None
+
+
+def jpg_optimization_metadata(aW, aH, aS):
+    return json.dumps({
+        'AW': aW,
+        'AH': aH,
+        'AS': aS,
+    }, separators=(',', ':'))
 
 
 def fetch_file_images(file_key, token):
@@ -765,26 +821,25 @@ def sync_metadata_for_hash_images(root_dir, src_dir, key):
             file = [file for file in files if file.stem == hash_][0]
             ext = file.suffix
             images[hash_] = file.name
-            if ext == ".png":
-                data = read_png_optimization_metadata(path / file)
-                if not data:
-                    continue
+            data = read_image_optimization_metadata(path / file)
+            if not data:
+                continue
 
-                d = data["dimensions"]
-                s = data["size"]
-                _ad = d['a']
-                _bd = d['b']
-                _as = s['a']
-                _bs = s['b']
-                _aw, _ah = _ad
-                _bw, _bh = _bd
-                dimensions[hash_] = [_aw, _ah]
-                optimization[hash_] = {
-                    hash_: {
-                        "dimensions": [_bw, _bh],
-                        "saved": (_as - _bs if _as is not None and _bs is not None else None)
-                    }
+            d = data["dimensions"]
+            s = data["size"]
+            _ad = d['a']
+            _bd = d['b']
+            _as = s['a']
+            _bs = s['b']
+            _aw, _ah = _ad
+            _bw, _bh = _bd
+            dimensions[hash_] = [_aw, _ah]
+            optimization[hash_] = {
+                hash_: {
+                    "dimensions": [_bw, _bh],
+                    "saved": (_as - _bs if _as is not None and _bs is not None else None)
                 }
+            }
 
         data = {
             **olddata,
