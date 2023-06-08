@@ -24,25 +24,40 @@ from functools import partial
 import queue
 from typing import List, Callable
 import resource
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageFile, UnidentifiedImageError
 from PIL.PngImagePlugin import PngInfo
 from datetime import datetime
 import math
 import logging
 from colorama import Fore
 import numpy as np
+import resource
+
+# Get current limit
+soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
+
+print(f'Soft limit starts as: {soft_limit}')
+
+# Try to update the limit
+resource.setrlimit(resource.RLIMIT_NOFILE, (4096, hard_limit))
+
+# Verify it now
+soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
+
+print(f'Soft limit changed to: {soft_limit}')
 
 # TODO: gifRef support
 
 
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+
+
 # configure logging
 logging.basicConfig(
+    filename="figma_archiver.log",
+    filemode="a",
     level=logging.WARN,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler("figma_archiver.log"),
-        logging.StreamHandler()
-    ]
 )
 
 
@@ -356,6 +371,15 @@ def requests_retry_session(
     return session
 
 
+def validate_image(image_path):
+    """Check if the image is valid or not."""
+    try:
+        Image.open(image_path).verify()
+        return True
+    except (IOError, SyntaxError):
+        return False
+
+
 @backoff.on_exception(
     backoff.expo, (requests.exceptions.RequestException,
                    SSLError), max_tries=5,
@@ -367,13 +391,20 @@ def download(url, output_path: str, timeout=10):
     try:
         response = requests_retry_session().get(url, stream=True, timeout=timeout)
         response.raise_for_status()
+        mimetype = mimetypes.guess_extension(response.headers["Content-Type"])
         if not '.' in output_path:
-            output_path = f'{output_path}{mimetypes.guess_extension(response.headers["Content-Type"])}'
+            output_path = f'{output_path}{mimetype}'
         with open(output_path, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
-            f.close()
-
+                if chunk:  # filter out keep-alive new chunks
+                    f.write(chunk)
+        # if image,
+        if mimetype in GRAPHIC_FORMATS:
+            # check if the image is valid, if not delete it
+            if not validate_image(output_path):
+                os.remove(output_path)
+                raise ValueError(
+                    "The downloaded image is truncated or corrupted.")
         return url, output_path
     # check if 403 Forbidden
     except requests.exceptions.HTTPError as e:
@@ -384,7 +415,8 @@ def download(url, output_path: str, timeout=10):
             tqdm.write(Fore.YELLOW + f"☒ Error {e} while downloading {url}")
             return None, None
     except Exception as e:
-        tqdm.write(Fore.YELLOW + f"☒ Error {e} while downloading {url}")
+        log_error(
+            f"☒ {(f'Error {e} while downloading {url}')}", print=True)
         return None, None
 
 
@@ -495,6 +527,10 @@ def optimize_image(path, out=None, max_size=1*mb, max_width=None, max_height=Non
     - 4. The scale factor used to resize the image
     """
     # validate inputs
+    if max_width == 0:
+        max_width = None
+    if max_height == 0:
+        max_height = None
     # either max_size or max_width or max_height must be specified
     if max_size is None and max_width is None and max_height is None:
         raise ValueError(
@@ -544,6 +580,8 @@ def optimize_image(path, out=None, max_size=1*mb, max_width=None, max_height=Non
 
         if scale_factor < 1:  # Only resize if new size is smaller
             new_size = (int(a_w * scale_factor), int(a_h * scale_factor))
+            if new_size[0] == 0 or new_size[1] == 0:
+                return False, 0, 0, 0, 0
             img = img.resize(new_size)
 
         # Save the image to a temporary file
@@ -589,7 +627,8 @@ def read_image_optimization_metadata(path):
     elif ext == '.jpg' or ext == '.jpeg':
         return read_jpg_optimization_metadata(path)
     else:
-        raise ValueError(f"Unsupported file extension: {ext}")
+        return None
+        # raise ValueError(f"Unsupported file extension: {ext}")
 
 
 def png_optimization_metadata(aW, aH, aS):
@@ -798,7 +837,6 @@ def log_error(msg, print=False):
     try:
         if print:
             tqdm.write(Fore.RED + msg)
-
         logging.error(msg)
     except Exception as e:
         ...
@@ -1080,8 +1118,8 @@ def get_node_dimensions(node):
     height_scale = transform[1][1]
 
     # The width and height are the scaling factors multiplied by the original size
-    width = width_scale * size['x']
-    height = height_scale * size['y']
+    width = width_scale if width_scale else 1 * size['x']
+    height = height_scale if height_scale else 1 * size['y']
 
     return width, height
 
