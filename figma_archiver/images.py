@@ -54,7 +54,7 @@ resource.setrlimit(
 load_dotenv()
 
 API_BASE_URL = "https://api.figma.com/v1"
-BOTTOM_POSITION = 24
+BOTTOM_POSITION = 32
 
 
 @click.command()
@@ -82,7 +82,7 @@ BOTTOM_POSITION = 24
 def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize, no_exports, max_mb_hash, types, thumbnails, only_thumbnails, only_sync, figma_token, source_dir, concurrency, skip_n, no_download, shuffle, sample):
     # progress bar position config
     global BOTTOM_POSITION
-    BOTTOM_POSITION = concurrency * 2 + 5
+    BOTTOM_POSITION = concurrency * 3 + 4
 
     if only_thumbnails:
         if thumbnails:
@@ -273,13 +273,15 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                                 bw, bh = dimB
                                 tqdm.write(
                                     Fore.BLUE +
-                                    f"☑ {fixstr(f'(optimized) {(saved / mb):.2f}MB @x{scale:.2f} {aw}x{ah} → {bw}x{bh} (max: {int(max_width)}x{int(max_height)} | {max_mb_hash}mb) {hash} ...')} → {path}"
+                                    f"☑ {fixstr(f'(optimized) {(saved / mb):.2f}MB @x{scale:.2f} {aw}x{ah} → {bw}x{bh} (max: {int(max_width) if max_width is not None else 0}x{int(max_height) if max_height is not None else 0} | {max_mb_hash}mb) {hash} ...')} → {path}"
                                     + Fore.RESET
                                 )
 
                     # we don't use queue for has images
                     fetch_and_save_image_fills(
-                        url_and_path_pairs, optimizer=optimizer)
+                        url_and_path_pairs, optimizer=optimizer,
+                        position=BOTTOM_POSITION-(index+6+concurrency)
+                    )
                     # for pair in url_and_path_pairs:
                     #   img_queue.put(pair + (optimizer,))
                 else:
@@ -446,7 +448,7 @@ def fetch_and_save_image_fills(url_and_path_pairs, optimizer: Optimizer, positio
 
         if position is not None:
             futures = tqdm(as_completed(futures), total=len(
-                futures), desc=f"Downloading fills (Utilizing {num_threads} threads)", position=position, leave=False)
+                futures), desc=f"📷 (C{num_threads})", position=position, leave=False)
         else:
             futures = as_completed(futures)
 
