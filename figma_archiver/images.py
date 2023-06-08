@@ -260,9 +260,6 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                                 bw, bh = dimB
                                 tqdm.write(
                                     f"☑ {fixstr(f'(optimized) {(saved / mb):.2f}MB @x{scale:.2f} {aw}x{ah} → {bw}x{bh} (max: {int(max_width)}x{int(max_height)} | {max_mb_hash}mb) {hash} ...')} → {path}")
-                            else:
-                                tqdm.write(
-                                    f"☒ {fixstr(f'(optimized) {hash}')} → {path}")
 
                     # we don't use queue for has images
                     fetch_and_save_image_fills(
