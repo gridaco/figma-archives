@@ -33,18 +33,6 @@ from colorama import Fore
 import numpy as np
 import resource
 
-# Get current limit
-soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
-
-print(f'Soft limit starts as: {soft_limit}')
-
-# Try to update the limit
-resource.setrlimit(resource.RLIMIT_NOFILE, (4096, hard_limit))
-
-# Verify it now
-soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
-
-print(f'Soft limit changed to: {soft_limit}')
 
 # TODO: gifRef support
 
@@ -95,6 +83,20 @@ BOTTOM_POSITION = 32
 @click.option("--shuffle", is_flag=True, help="Rather if to randomize the input for even distribution", default=False, type=click.BOOL)
 @click.option("--sample", default=None, help="Sample n files from the input", type=click.INT)
 def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize, no_exports, max_mb_hash, types, thumbnails, only_thumbnails, only_sync, figma_token, source_dir, concurrency, skip_n, no_download, shuffle, sample):
+
+    # Get current limit
+    soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
+
+    print(f'Soft limit starts as: {soft_limit}')
+    # Try to update the limit
+    resource.setrlimit(resource.RLIMIT_NOFILE,
+                       ((concurrency + 1) * 64 * 2, hard_limit))
+
+    # Verify it now
+    soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
+
+    print(f'Soft limit changed to: {soft_limit}')
+
     # progress bar position config
     global BOTTOM_POSITION
     BOTTOM_POSITION = concurrency * 3 + 4
@@ -286,15 +288,15 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                             if success:
                                 aw, ah = dimA
                                 bw, bh = dimB
-                                tqdm.write(
-                                    Fore.BLUE +
-                                    f"☑ {fixstr(f'(optimized) {(saved / mb):.2f}MB @x{scale:.2f} {aw}x{ah} → {bw}x{bh} (max: {int(max_width) if max_width is not None else 0}x{int(max_height) if max_height is not None else 0} | {max_mb_hash}mb) {hash} ...')} → {path}"
-                                    + Fore.RESET
-                                )
+                                # tqdm.write(
+                                #     Fore.BLUE +
+                                #     f"☑ {fixstr(f'(optimized) {(saved / mb):.2f}MB @x{scale:.2f} {aw}x{ah} → {bw}x{bh} (max: {int(max_width) if max_width is not None else 0}x{int(max_height) if max_height is not None else 0} | {max_mb_hash}mb) {hash} ...')} → {path}"
+                                #     + Fore.RESET
+                                # )
 
                     # we don't use queue for has images
                     fetch_and_save_image_fills(
-                        url_and_path_pairs, optimizer=optimizer,
+                        file_key=key, url_and_path_pairs=url_and_path_pairs, optimizer=optimizer,
                         position=BOTTOM_POSITION-(index+6+concurrency)
                     )
                     # for pair in url_and_path_pairs:
@@ -412,7 +414,8 @@ def download(url, output_path: str, timeout=10):
             log_error(f"☒ {fixstr(f'Forbidden (Expired): {url}')}", print=True)
             return None, None
         else:
-            tqdm.write(Fore.YELLOW + f"☒ Error {e} while downloading {url}")
+            tqdm.write(Fore.YELLOW +
+                       f"☒ Error {e} while downloading {url}" + Fore.RESET)
             return None, None
     except Exception as e:
         log_error(
@@ -473,26 +476,26 @@ PostProcessor = Callable[[str], None]
 Optimizer = PostProcessor
 
 
-def fetch_and_save_image_fills(url_and_path_pairs, optimizer: Optimizer, position=4, num_threads=64):
+def fetch_and_save_image_fills(file_key, url_and_path_pairs, optimizer: Optimizer, position=4, num_threads=64):
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
         futures = {executor.submit(download, url, path): (
             url, path) for url, path in url_and_path_pairs}
 
         if position is not None:
             futures = tqdm(as_completed(futures), total=len(
-                futures), desc=f"📷 (C{num_threads})", position=position, leave=False)
+                futures), desc=f"📷 {file_key[:5]} (C{num_threads})", position=position, leave=False)
         else:
             futures = as_completed(futures)
 
         for future in futures:
             url, downloaded_path = future.result()
             if downloaded_path:
-                tqdm.write(
-                    Fore.WHITE + f"☑ {fixstr(url)} → {downloaded_path}" + Fore.RESET)
+                # tqdm.write(
+                #     Fore.WHITE + f"☑ {fixstr(url)} → {downloaded_path}" + Fore.RESET)
                 if optimizer is not None:
                     optimizer(downloaded_path)
             else:
-                tqdm.write(Fore.YELLOW + f"Failed to download image: {url}")
+                log_error(f"☒ Failed to download image: {file_key} - {url}")
 
 
 def fixstr(str, n=80):
@@ -710,7 +713,8 @@ def fetch_file_images(file_key, token):
     try:
         response = requests.get(url, headers=headers)
         data = response.json()
-    except requests.exceptions.ConnectionError as e:
+    except (requests.exceptions.ConnectionError, json.decoder.JSONDecodeError) as e:
+        log_error(f"☒ Error fetching image fills: {e}", print=True)
         return {}
 
     if "error" in data and data["error"]:
@@ -836,7 +840,7 @@ def calculate_program():
 def log_error(msg, print=False):
     try:
         if print:
-            tqdm.write(Fore.RED + msg)
+            tqdm.write(Fore.RED + msg + Fore.RESET)
         logging.error(msg)
     except Exception as e:
         ...
