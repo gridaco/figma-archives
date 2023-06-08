@@ -262,25 +262,30 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                 existing_images = get_existing_images(images_dir)
 
                 paint_map = image_paint_map(file_data["document"])
+                # Figma api also returns hashes for images that are not used in the file. We need to filter them out
+                hashes = paint_map.keys()
+                existing_hashes = [
+                    Path(image).stem for image in existing_images]
 
-                # TODO: this is not safe. the image fills still can be not complete if we terminate during the download
+                hashes_to_download = [
+                    # filter out the hashes that are already downloaded
+                    # => if hash is not in existing_hashes
+                    hash for hash in hashes if hash not in existing_hashes
+                ]
+
                 # Fetch and save image fills (B)
-                if len(existing_images) == 0 and not no_download:
+                if len(hashes_to_download) > 0 and not no_download:
                     # tqdm.write("Fetching image fills...")
                     image_fills = fetch_file_images(key, token=figma_token)
                     url_and_path_pairs = [
-                        (url, os.path.join(images_dir, hash_))
+                        (url, images_dir / hash_)
                         for hash_, url in image_fills.items()
                     ]
 
-                    # Figma api also returns hashes for images that are not used in the file. We need to filter them out
-                    hashes = paint_map.keys()
-
-                    # update the url_and_path_pairs to only include the hashes that are in the paint_map
+                    # update the url_and_path_pairs to only include the hases that is in hashes_to_download
+                    # the path from above does not have extension, we don't need to use .stem but .name
                     url_and_path_pairs = [
-                        (url, path)
-                        for url, path in url_and_path_pairs
-                        if Path(path).stem in hashes
+                        (url, path) for url, path in url_and_path_pairs if path.name in hashes_to_download
                     ]
 
                     def optimizer(path):
@@ -410,7 +415,10 @@ def validate_image(image_path):
                    SSLError), max_tries=5,
     logger=logging.getLogger('backoff').addHandler(logging.StreamHandler())
 )
-def download(url, output_path: str, timeout=10):
+def download(url, output_path: str | Path, timeout=10):
+    # path as string
+    output_path = str(output_path)
+
     if url is None:
         return None, None
     try:
@@ -1152,8 +1160,8 @@ def get_node_dimensions(node):
     height_scale = transform[1][1]
 
     # The width and height are the scaling factors multiplied by the original size
-    width = width_scale if width_scale else 1 * size['x']
-    height = height_scale if height_scale else 1 * size['y']
+    width = (width_scale if width_scale else 1) * size['x']
+    height = (height_scale if height_scale else 1) * size['y']
 
     return width, height
 
@@ -1314,7 +1322,7 @@ def optimized_image_paint_map(paint_map, images: dict):
 
             max_width = max(max_width, width)
             max_height = max(max_height, height)
-
+            # print((max_width, max_height), imgsize,  nodesize, node, paint)
         info["max"] = {
             "width": max_width,
             "height": max_height,
