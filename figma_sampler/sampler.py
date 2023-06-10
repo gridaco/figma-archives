@@ -21,6 +21,8 @@ logging.basicConfig(filename='error-files.log', level=logging.ERROR)
 @click.option('--output', required=True, type=click.Path(), help='Path to output directory')
 @click.option('--dir-files-archive', required=True, type=click.Path(exists=True, file_okay=False), help='Path to files archive directory')
 @click.option('--dir-images-archive', required=False, type=click.Path(exists=True, file_okay=False), help='Path to images archive directory')
+@click.option('--dir-image-exports-archive', required=False, type=click.Path(exists=True, file_okay=False), help='Path to image exports archive directory')
+@click.option('--dir-image-fills-archive', required=False, type=click.Path(exists=True, file_okay=False), help='Path to image fills archive directory')
 @click.option('--sample', default=None, type=int, help='Number of samples to process')
 @click.option('--sample-all', is_flag=False, help='Process all available data')
 @click.option('--no-compress', is_flag=True, default=False, help='If set, the file.json will be not be compressed with gzip - if the source is .json.gz, it will follow the origin even if set')
@@ -30,11 +32,25 @@ logging.basicConfig(filename='error-files.log', level=logging.ERROR)
 @click.option('--only-images', is_flag=True, default=False, help='Only copy images for files')
 @click.option('--shuffle', is_flag=True, default=False, help='Shuffle the index')
 @click.option('--link', is_flag=True, default=False, help='Use symbolic link instead of copy')
-def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample, sample_all, no_compress, ensure_images, ensure_meta, skip_images, only_images, shuffle, link):
+def main(index, map, meta, output, dir_files_archive, dir_images_archive, dir_image_exports_archive, dir_image_fills_archive, sample, sample_all, no_compress, ensure_images, ensure_meta, skip_images, only_images, shuffle, link):
     index = Path(index)
     dir_files_archive = Path(dir_files_archive)
-    dir_images_archive = Path(
-        dir_images_archive) if dir_images_archive is not None else None
+
+    if dir_images_archive:
+        dir_images_archive = Path(
+            dir_images_archive) if dir_images_archive is not None else None
+        dir_image_fills_archive = dir_images_archive
+        dir_image_exports_archive = dir_images_archive
+    else:
+        dir_image_fills_archive = Path(
+            dir_image_fills_archive) if dir_image_fills_archive else None
+        dir_image_exports_archive = Path(
+            dir_image_exports_archive) if dir_image_exports_archive else None
+
+    if not skip_images:
+        if not ((dir_image_exports_archive.exists() and dir_image_fills_archive.exists())):
+            raise click.UsageError(
+                'Images archive directory does not exist')
 
     do_files = not only_images
     do_images = not skip_images
@@ -66,9 +82,6 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
         meta_data = json.load(f)
         # now, convert it to key-value pair with id as key
         meta_data = {obj["id"]: obj for obj in meta_data}
-
-    if not skip_images and not dir_images_archive.exists():
-        raise click.UsageError('Images archive directory does not exist')
 
     # create root output dir
     output = Path(output)
@@ -156,23 +169,45 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, sample
 
             # Copy images
             if do_images:
-                images_archive_dir = dir_images_archive / file_key
-                if images_archive_dir.exists():
-                    # copy items under images_archive_dir to output_dir/images (files and directories)
-                    # shutil.copytree(images_archive_dir, output_dir / "images") - this copies the directory itself
-                    for item in images_archive_dir.iterdir():
-                        if link:
-                            # create a symlink
-                            os.symlink(item, output_dir / item.name)
-                        else:
+                def cp(dir: Path):
+                    if dir.exists():
+                        # copy items under images_archive_dir to output_dir/images (files and directories)
+                        # shutil.copytree(images_archive_dir, output_dir / "images") - this copies the directory itself
+                        for item in dir.iterdir():
+                            # if item is file, skip (can be .DS_Store)
                             if item.is_file():
-                                shutil.copy(item, output_dir / item.name)
-                            elif item.is_dir():
-                                shutil.copytree(item, output_dir / item.name)
+                                continue
+
+                            target = output_dir / item.name
+                            # if exists, remove and create a new one
+                            if (target).exists():
+                                # if target is a symlink, remove it
+                                if target.is_symlink():
+                                    target.unlink()
+                                # if target is a directory, remove it
+                                elif target.is_dir():
+                                    shutil.rmtree(target)
+
+                            if link:
+                                # create a symlink
+                                os.symlink(item, target)
+                            else:
+                                if item.is_file():
+                                    shutil.copy(item, target)
+                                elif item.is_dir():
+                                    shutil.copytree(
+                                        item, output_dir / item.name)
+                    else:
+                        if ensure_images:
+                            raise OkException(
+                                id, file_key, f"Images not found for sample <{title}>")
+
+                # copy fills & exports
+                if dir_images_archive:
+                    cp(dir_images_archive / file_key)
                 else:
-                    if ensure_images:
-                        raise OkException(
-                            id, file_key, f"Images not found for sample <{title}>")
+                    cp(dir_image_exports_archive / file_key)
+                    cp(dir_image_fills_archive / file_key)
 
             tqdm.write(
                 Fore.WHITE + f"☑ {id} → {output_dir} ({file_key} / {title})")
