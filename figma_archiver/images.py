@@ -273,6 +273,39 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                     hash for hash in hashes if hash not in existing_hashes
                 ]
 
+                def optimizer(path):
+                    hash = Path(path).stem
+                    # tqdm.write(hash, paint_map)
+                    # print(hashes, hash, paint_map, json_file)
+                    opt = optimized_image_paint_map(
+                        paint_map={hash: paint_map[hash]},
+                        images={
+                            hash: path
+                        }
+                    )
+
+                    max_width = opt[hash].get("max", {}).get("width", None)
+                    max_height = opt[hash].get(
+                        "max", {}).get("height", None)
+
+                    if optimize:
+                        success, saved, dimA, dimB, scale = optimize_image(
+                            path=path,
+                            max_size=(
+                                max_mb_hash*mb) if max_mb_hash else None,
+                            max_width=max_width, max_height=max_height
+                        )
+                        if success:
+                            aw, ah = dimA
+                            bw, bh = dimB
+                            # tqdm.write(
+                            #     Fore.BLUE +
+                            #     f"☑ {fixstr(f'(optimized) {(saved / mb):.2f}MB @x{scale:.2f} {aw}x{ah} → {bw}x{bh} (max: {int(max_width) if max_width is not None else 0}x{int(max_height) if max_height is not None else 0} | {max_mb_hash}mb) {hash} ...')} → {path}"
+                            #     + Fore.RESET
+                            # )
+                            #     tqdm.write(
+                            #         f"☑ {fixstr(f'(existing) Saved {(saved / mb):.2f}MB')}... → {file}")
+
                 # Fetch and save image fills (B)
                 if len(hashes_to_download) > 0 and not no_download:
                     # tqdm.write("Fetching image fills...")
@@ -288,40 +321,10 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                         (url, path) for url, path in url_and_path_pairs if path.name in hashes_to_download
                     ]
 
-                    def optimizer(path):
-                        hash = Path(path).stem
-                        # tqdm.write(hash, paint_map)
-                        # print(hashes, hash, paint_map, json_file)
-                        opt = optimized_image_paint_map(
-                            paint_map={hash: paint_map[hash]},
-                            images={
-                                hash: path
-                            }
-                        )
-
-                        max_width = opt[hash].get("max", {}).get("width", None)
-                        max_height = opt[hash].get(
-                            "max", {}).get("height", None)
-
-                        if optimize:
-                            success, saved, dimA, dimB, scale = optimize_image(
-                                path=path,
-                                max_size=(
-                                    max_mb_hash*mb) if max_mb_hash else None,
-                                max_width=max_width, max_height=max_height
-                            )
-                            if success:
-                                aw, ah = dimA
-                                bw, bh = dimB
-                                # tqdm.write(
-                                #     Fore.BLUE +
-                                #     f"☑ {fixstr(f'(optimized) {(saved / mb):.2f}MB @x{scale:.2f} {aw}x{ah} → {bw}x{bh} (max: {int(max_width) if max_width is not None else 0}x{int(max_height) if max_height is not None else 0} | {max_mb_hash}mb) {hash} ...')} → {path}"
-                                #     + Fore.RESET
-                                # )
                     if len(url_and_path_pairs) > 0:
                         # we don't use queue for has images
                         fetch_and_save_image_fills(
-                            file_key=key, url_and_path_pairs=url_and_path_pairs, optimizer=optimizer,
+                            file_key=key, url_and_path_pairs=url_and_path_pairs, optimizer=(optimizer if optimize else None),
                             position=BOTTOM_POSITION-(index+6+concurrency),
                             hide_progress=hide_progress
                         )
@@ -331,15 +334,10 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                 else:
                     # tqdm.write(f"{images_dir} - Image fills already fetched")
                     ...
-                    # TODO: optimizing existing image should also have w/h factor
-                    # if optimize:
-                    #     for image in existing_images:
-                    #         file = images_dir / image
-                    #         success, saved, dim, scale = optimize_image(
-                    #             file, max_size=max_mb_hash*mb)
-                    #         if success:
-                    #             tqdm.write(
-                    #                 f"☑ {fixstr(f'(existing) Saved {(saved / mb):.2f}MB')}... → {file}")
+                    if optimize:
+                        for image in existing_images:
+                            file = images_dir / image
+                            optimizer(file)
 
             # ----------------------------------------------------------------------
             # exports
@@ -1166,7 +1164,7 @@ def get_node_dimensions(node):
     return width, height
 
 
-def optimized_image_paint_map(paint_map, images: dict):
+def optimized_image_paint_map(paint_map, images: dict) -> dict[str, dict]:
     """
     Create a map that shows each hash image's usage in a document and the nodes that use it, along with the paint object.
     Plus, it also returns a "max" property for each hash image, which is the maximum size of the image used in the document.
@@ -1311,8 +1309,12 @@ def optimized_image_paint_map(paint_map, images: dict):
             elif scale_mode == "STRETCH":
                 image_transform = paint["imageTransform"]
                 rotation = paint.get("rotation", 0)
-                width, height = calculate_stretch_size(
+                try:
+                    width, height = calculate_stretch_size(
                     imgsize, image_transform, rotation, relativeTransform)
+                except TypeError as e:
+                    log_error(f'unable to get desired size - {e}')
+                    continue
             else:
                 raise ValueError(f"Unsupported scale mode: {scale_mode}")
 
@@ -1331,7 +1333,7 @@ def optimized_image_paint_map(paint_map, images: dict):
     return paint_map
 
 
-def image_paint_map(node):
+def image_paint_map(node) -> dict:
     """
     Create a map that shows where each image hash is used in a document.
 
