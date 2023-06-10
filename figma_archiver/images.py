@@ -288,23 +288,22 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                     max_height = opt[hash].get(
                         "max", {}).get("height", None)
 
-                    if optimize:
-                        success, saved, dimA, dimB, scale = optimize_image(
-                            path=path,
-                            max_size=(
-                                max_mb_hash*mb) if max_mb_hash else None,
-                            max_width=max_width, max_height=max_height
-                        )
-                        if success:
-                            aw, ah = dimA
-                            bw, bh = dimB
-                            # tqdm.write(
-                            #     Fore.BLUE +
-                            #     f"☑ {fixstr(f'(optimized) {(saved / mb):.2f}MB @x{scale:.2f} {aw}x{ah} → {bw}x{bh} (max: {int(max_width) if max_width is not None else 0}x{int(max_height) if max_height is not None else 0} | {max_mb_hash}mb) {hash} ...')} → {path}"
-                            #     + Fore.RESET
-                            # )
-                            #     tqdm.write(
-                            #         f"☑ {fixstr(f'(existing) Saved {(saved / mb):.2f}MB')}... → {file}")
+                    success, saved, dimA, dimB, scale = optimize_image(
+                        path=path,
+                        max_size=(
+                            max_mb_hash*mb) if max_mb_hash else None,
+                        max_width=max_width, max_height=max_height
+                    )
+                    if success:
+                        aw, ah = dimA
+                        bw, bh = dimB
+                        # tqdm.write(
+                        #     Fore.BLUE +
+                        #     f"☑ {fixstr(f'(optimized) {(saved / mb):.2f}MB @x{scale:.2f} {aw}x{ah} → {bw}x{bh} (max: {int(max_width) if max_width is not None else 0}x{int(max_height) if max_height is not None else 0} | {max_mb_hash}mb) {hash} ...')} → {path}"
+                        #     + Fore.RESET
+                        # )
+                        #     tqdm.write(
+                        #         f"☑ {fixstr(f'(existing) Saved {(saved / mb):.2f}MB')}... → {file}")
 
                 # Fetch and save image fills (B)
                 if len(hashes_to_download) > 0 and not no_download:
