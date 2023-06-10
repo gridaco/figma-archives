@@ -239,6 +239,9 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
 
         json_file = src_dir / Path(json_file)
         file_data = read_file_data(json_file)
+        # indicates if process is satisfied - change to false if any of the conditions are not met
+        # this only works for blocked process [thumbnail, fills] and does not work for [exports] - we can't check if the exports download is complete (it uses the image queue, while fills does not)
+        satisfied = True
         skipped = True
 
         if file_data:
@@ -328,8 +331,14 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                             hide_progress=hide_progress
                         )
                         skipped = False
-                    # for pair in url_and_path_pairs:
-                    #   img_queue.put(pair + (optimizer,))
+                  
+                    # validate the images - list the images, compare if all is downloaded from (hashes)
+                    existing_images = get_existing_images(images_dir)
+                    existing_hashes = [Path(image).stem for image in existing_images]
+                    # check if all hashes are downloaded (check if two lists are equal, compare each item)
+                    if len(hashes) != len(existing_hashes) or not all([hash in existing_hashes for hash in hashes]):
+                        satisfied = False
+
                 else:
                     # tqdm.write(f"{images_dir} - Image fills already fetched")
                     ...
@@ -373,6 +382,7 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                 else:
                     # tqdm.write(f"{images_dir} - Layer images already fetched")
                     ...
+        if satisfied:
             color = Fore.YELLOW if skipped else Fore.GREEN
             tqdm.write(color + f"☑ {subdir}" + Fore.RESET)
         else:
