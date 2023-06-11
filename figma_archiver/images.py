@@ -39,23 +39,6 @@ import resource
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
-now = datetime.now()
-iso_now = now.replace(microsecond=0).isoformat()
-
-
-# configure logging
-logging.basicConfig(
-    filename=f"figma_archiver-{iso_now}.log",
-    filemode="a",
-    level=logging.WARN,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
-
-
-resource.setrlimit(
-    resource.RLIMIT_CORE,
-    (resource.RLIM_INFINITY, resource.RLIM_INFINITY))
-
 
 load_dotenv()
 
@@ -86,6 +69,20 @@ API_BASE_URL = "https://api.figma.com/v1"
 @click.option("--sample", default=None, help="Sample n files from the input", type=click.INT)
 @click.option("--hide-progress", help="Hide progress bar", default=None, type=click.Choice([True, False, None, "*", "c"]))
 def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize, no_exports, max_mb_hash, types, thumbnails, only_thumbnails, only_sync, figma_token, source_dir, concurrency, skip_n, no_download, shuffle, sample, hide_progress):
+
+    now = datetime.now()
+    iso_now = now.replace(microsecond=0).isoformat()
+    logfile = f"figma_archiver-{iso_now}.log"
+
+    # configure logging
+    logging.basicConfig(
+        filename=logfile,
+        filemode="a",
+        level=logging.WARN,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+    )
+
+    click.echo(f"Logging to {logfile}")
 
     # progress display config
     hide_progress_main = False
