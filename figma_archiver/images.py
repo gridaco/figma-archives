@@ -120,7 +120,7 @@ def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize,
         if not no_exports:
             cbars += 1
 
-    BOTTOM_POSITION = 2 + 2 + ((concurrency + 2) * cbars) + 4
+    BOTTOM_POSITION = ((concurrency + 2) * cbars) + 4
 
     if only_thumbnails:
         if thumbnails:
@@ -375,7 +375,7 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                         key, node_ids_to_fetch, scale, format,
                         token=figma_token,
                         position=pbarpos(
-                            1, index=index, margin=4, batch=concurrency),
+                            1, index=index, margin=5, batch=concurrency),
                         conncurrency=concurrency)
                     url_and_path_pairs = [
                         (
