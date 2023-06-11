@@ -57,7 +57,6 @@ resource.setrlimit(
 load_dotenv()
 
 API_BASE_URL = "https://api.figma.com/v1"
-BOTTOM_POSITION = 32
 
 
 @click.command()
@@ -114,9 +113,14 @@ def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize,
     # progress bar position config
     global BOTTOM_POSITION
 
-    cbars = 0 if hide_progress_c else (2 if not no_fills else 1)
+    cbars = 0 if hide_progress_c else 1
+    if not hide_progress_c:
+        if not no_fills:
+            cbars += 1
+        if not no_exports:
+            cbars += 1
 
-    BOTTOM_POSITION = 2 + 2 + (concurrency * cbars) + 4
+    BOTTOM_POSITION = 2 + 2 + ((concurrency + 2) * cbars) + 4
 
     if only_thumbnails:
         if thumbnails:
@@ -175,7 +179,7 @@ def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize,
     if not only_sync:
         # main progress bar
         pbar = tqdm(total=len(json_files),
-                    position=BOTTOM_POSITION, leave=True, disable=hide_progress_main)
+                    position=pbarpos(0), leave=True, disable=hide_progress_main)
 
         chunks = chunked_zips(file_keys, json_files, n=concurrency)
         threads: list[threading.Thread] = []
@@ -223,7 +227,7 @@ def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize,
     download_thread.join()
 
     # validation & meta sync
-    for _ in tqdm(json_files, desc="🔥 Final Validation & Meta Sync", position=BOTTOM_POSITION, leave=True):
+    for _ in tqdm(json_files, desc="🔥 Final Validation & Meta Sync", position=pbarpos(0), leave=True):
         key = Path(_).stem
         sync_metadata_for_exports(root_dir=root_dir, src_dir=_src_dir, key=key)
         sync_metadata_for_hash_images(
@@ -233,7 +237,7 @@ def main(version, dir, format, scale, depth, include_canvas, no_fills, optimize,
 
 def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, include_canvas: bool, no_fills: bool, no_exports: bool, thumbnails: bool, types: list[str], figma_token: str, format: str, scale: int, optimize: bool, max_mb_hash: int, depth: int, index: int, size: int, pbar: tqdm, concurrency: int, no_download: bool, hide_progress: bool):
     # for key, json_file in files:
-    for key, json_file in tqdm(files, desc=f"⚡️ {figma_token[:8]}", position=BOTTOM_POSITION-(index+4), leave=True, total=size, disable=hide_progress):
+    for key, json_file in tqdm(files, desc=fixstr(f"⚡️ C{index + 1}", 6), position=pbarpos(0, index=index, margin=4, batch=concurrency), leave=True, total=size, disable=hide_progress):
         subdir: Path = root_dir / key
         subdir.mkdir(parents=True, exist_ok=True)
 
@@ -326,15 +330,18 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                     if len(url_and_path_pairs) > 0:
                         # we don't use queue for has images
                         fetch_and_save_image_fills(
-                            file_key=key, url_and_path_pairs=url_and_path_pairs, optimizer=(optimizer if optimize else None),
-                            position=BOTTOM_POSITION-(index+6+concurrency),
+                            file_key=key, url_and_path_pairs=url_and_path_pairs, optimizer=(
+                                optimizer if optimize else None),
+                            position=pbarpos(
+                                3, index=index, margin=6, batch=concurrency),
                             hide_progress=hide_progress
                         )
                         skipped = False
-                  
+
                     # validate the images - list the images, compare if all is downloaded from (hashes)
                     existing_images = get_existing_images(images_dir)
-                    existing_hashes = [Path(image).stem for image in existing_images]
+                    existing_hashes = [
+                        Path(image).stem for image in existing_images]
                     # check if all hashes are downloaded (check if two lists are equal, compare each item)
                     if len(hashes) != len(existing_hashes) or not all([hash in existing_hashes for hash in hashes]):
                         satisfied = False
@@ -365,7 +372,11 @@ def process_files(files, root_dir: Path, src_dir: Path, img_queue: queue.Queue, 
                 if node_ids_to_fetch and not no_download:
                     # tqdm.write(f"Fetching {len(node_ids_to_fetch)} of {len(node_ids)} layer images...")
                     layer_images = fetch_node_images(
-                        key, node_ids_to_fetch, scale, format, token=figma_token, position=BOTTOM_POSITION-((concurrency*2)+index), conncurrency=concurrency)
+                        key, node_ids_to_fetch, scale, format,
+                        token=figma_token,
+                        position=pbarpos(
+                            1, index=index, margin=4, batch=concurrency),
+                        conncurrency=concurrency)
                     url_and_path_pairs = [
                         (
                             url,
@@ -455,6 +466,11 @@ def download(url, output_path: str | Path, timeout=10):
             tqdm.write(Fore.YELLOW +
                        f"☒ Error {e} while downloading {url}" + Fore.RESET)
             return None, None
+    # check if TimeoutError (& ReadTimeout)
+    except requests.exceptions.Timeout as e:
+        log_error(f"☒ {fixstr(f'Timeout: {url}')}", print=True)
+        return None, None
+
     except Exception as e:
         log_error(
             f"☒ {(f'Error {e} while downloading {url}')}", print=True)
@@ -476,7 +492,7 @@ def image_queue_handler(img_queue: queue.Queue, batch=64):
         url = None
 
         progress = tqdm(
-            total=batch, desc=f"📭 ({total}/{total+img_queue.qsize()})", position=BOTTOM_POSITION-2, leave=False)
+            total=batch, desc=f"📭 ({total}/{total+img_queue.qsize()})", position=pbarpos(0, margin=2), leave=False)
 
         while len(items_to_process) < batch:
             try:
@@ -854,7 +870,7 @@ def fetch_node_images(file_key, ids, scale, format, token, position, conncurrenc
         for batch_idx in pbar:
             for _chunk in batch_chunks[batch_idx]:
                 pbar.set_description(
-                    f"{random.choice(emojis)} {batch_idx + 1}/{num_batches}: Fetching... ({size})")
+                    fixstr(f"{random.choice(emojis)} {fixstr(file_key, 8)} @{scale}x.{format} ({size})", 25))
                 image_urls.update(fetch_images_chunk(chunk=_chunk))
 
             if batch_idx < num_batches - 1:
@@ -1320,7 +1336,7 @@ def optimized_image_paint_map(paint_map, images: dict) -> dict[str, dict]:
                 rotation = paint.get("rotation", 0)
                 try:
                     width, height = calculate_stretch_size(
-                    imgsize, image_transform, rotation, relativeTransform)
+                        imgsize, image_transform, rotation, relativeTransform)
                 except TypeError as e:
                     log_error(f'unable to get desired size - {e}')
                     continue
@@ -1462,6 +1478,15 @@ def scale_and_format_from_name(name):
         scale = 1
 
     return name, scale, fmt
+
+
+def pbarpos(pos, index=0, margin=0, batch=1):
+    """
+    returns the position of the progress bar
+    the pos starts from the bottom.
+    """
+
+    return BOTTOM_POSITION - ((index + margin) + (pos * batch))
 
 
 # main
