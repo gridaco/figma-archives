@@ -39,10 +39,13 @@ import resource
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
+now = datetime.now()
+iso_now = now.replace(microsecond=0).isoformat()
+
 
 # configure logging
 logging.basicConfig(
-    filename="figma_archiver.log",
+    filename=f"figma_archiver-{iso_now}.log",
     filemode="a",
     level=logging.WARN,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -429,34 +432,44 @@ def validate_image(image_path):
 
 
 @backoff.on_exception(
-    backoff.expo, (requests.exceptions.RequestException,
-                   SSLError), max_tries=5,
+    backoff.expo, (
+        # this inclues - requests.exceptions.ConnectionError, requests.exceptions.Timeout,
+        requests.exceptions.RequestException,
+        SSLError), max_tries=5,
     logger=logging.getLogger('backoff').addHandler(logging.StreamHandler())
 )
+def __download(url: str, output_path: str, timeout: int = 10):
+    response = requests_retry_session().get(url, stream=True, timeout=timeout)
+    response.raise_for_status()
+    mimetype = mimetypes.guess_extension(response.headers["Content-Type"])
+    if not '.' in output_path:
+        output_path = f'{output_path}{mimetype}'
+    with open(output_path, "wb") as f:
+        for chunk in response.iter_content(chunk_size=8192):
+            if chunk:  # filter out keep-alive new chunks
+                f.write(chunk)
+    # if image,
+    if mimetype in GRAPHIC_FORMATS:
+        # check if the image is valid, if not delete it
+        if not validate_image(output_path):
+            os.remove(output_path)
+            raise ValueError(
+                "The downloaded image is truncated or corrupted.")
+    return url, output_path
+
+
 def download(url, output_path: str | Path, timeout=10):
+    """
+    download safely with backoff. this does not throw error.
+    """
+
     # path as string
     output_path = str(output_path)
 
     if url is None:
         return None, None
     try:
-        response = requests_retry_session().get(url, stream=True, timeout=timeout)
-        response.raise_for_status()
-        mimetype = mimetypes.guess_extension(response.headers["Content-Type"])
-        if not '.' in output_path:
-            output_path = f'{output_path}{mimetype}'
-        with open(output_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:  # filter out keep-alive new chunks
-                    f.write(chunk)
-        # if image,
-        if mimetype in GRAPHIC_FORMATS:
-            # check if the image is valid, if not delete it
-            if not validate_image(output_path):
-                os.remove(output_path)
-                raise ValueError(
-                    "The downloaded image is truncated or corrupted.")
-        return url, output_path
+        return __download(url=url, output_path=output_path, timeout=timeout)
     # check if 403 Forbidden
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 403:
