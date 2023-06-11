@@ -4,49 +4,50 @@
 # a, b - archive directories with [key].json
 ###
 
+import os
 import click
 import shutil
 from pathlib import Path
+from tqdm import tqdm
 
 
 @click.command()
 @click.argument('a', type=click.Path(exists=True, file_okay=False, dir_okay=True))
 @click.argument('b', type=click.Path(exists=False))
 @click.option('--list', 'list_file', help='list file (txt, line separated) containing file keys - read & select from [a]', required=True, type=click.Path(exists=True, file_okay=True, dir_okay=False))
-def main(a, b, list_file):
+@click.option('--link', help='use symlink to sync files (default: False)', is_flag=True)
+def main(a, b, list_file, link):
     a = Path(a)
     b = Path(b)
 
     try:
-        b.mkdir(parents=True, exist_ok=True)
-        # validate b is empty
-        if len(list(b.iterdir())) > 0:
-            raise FileExistsError
+        b.mkdir(parents=True, exist_ok=False)
     except FileExistsError:
-        print(f"🚨 '{b}' is not empty.")
+        click.echo(f"🚨 '{b}' is not empty.")
         return
 
     # read lines (remove empty lines)
     target_keys = open(list_file, 'r').read().splitlines()
     target_keys = [k for k in target_keys if k != '']
 
-    # tqdm.write(f"📦 {len(target_keys)} files to be copied from {a} to {b}.")
+    tqdm.write(f"📦 {len(target_keys)} files to be copied from {a} to {b}.")
 
     success = 0
-    # select files with target_keys
-    # pbar = tqdm(total=len(target_keys))
-
-    for key in target_keys:  # tqdm():
+    for key in tqdm(target_keys):
+        origin = a / f"{key}.json"
+        target = b / f"{key}.json"
         # check if key exists in a
-        if Path(a / f"{key}.json").exists():
-            # copy to b
-            shutil.copy(a / f"{key}.json", b / f"{key}.json")
-            # tqdm.write(f"📦 {key}.json")
+        if origin.exists():
+            if link:
+                # link to b
+                os.symlink(origin, target)
+            else:
+                # copy to b
+                shutil.copy(origin, target)
+            tqdm.write(f"📦 {origin} → {target}")
             success += 1
         else:
-            ...
-            # tqdm.write(f"❌ {key}.json")
-        # pbar.update(1)
+            tqdm.write(f"❌ {key}.json")
 
     msg = f"📦 {success}/{len(target_keys)} files copied from '{a}' to '{b}'"
     # tqdm.write(msg)
