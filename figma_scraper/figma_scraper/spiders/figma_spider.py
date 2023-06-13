@@ -27,6 +27,7 @@ class FigmaSpider(scrapy.Spider):
     name = 'figma_spider'
     start_urls = []
     progress_bar = tqdm(total=1, desc="Crawling items", position=0)
+    autosave_timer: threading.Timer = None
 
     def __init__(self, target='popular', **kwargs):
         # recent, trending, popular , e.g. pass with -a target=recent
@@ -61,7 +62,8 @@ class FigmaSpider(scrapy.Spider):
 
         def save_data_periodically():
             save_data()
-            threading.Timer(600, save_data_periodically).start()
+            self.autosave_timer = threading.Timer(
+                600, save_data_periodically).start()
 
         save_data_periodically()
 
@@ -118,21 +120,32 @@ class FigmaSpider(scrapy.Spider):
                     if id in scraped_ids:
                         continue
                     else:
+                        # .//a[contains(@class, "feed_page--title--VobyW")]
+                        # => .//a[contains(@class, "feed_page--title")]
                         title = item.xpath(
-                            './/a[contains(@class, "feed_page--title--VobyW")]/text()').get()
+                            './/a[contains(@class, "feed_page--title")]/text()').get()
                         thumbnail = item.xpath('.//img/@src').get()
+                        # .//a[contains(@class, "feed_page--resourceMetaAuthor--JOdu5")]
+                        # => .//a[contains(@class, "feed_page--resourceMetaAuthor")]
                         author_link = item.xpath(
-                            './/a[contains(@class, "feed_page--resourceMetaAuthor--JOdu5")]/@href').get()
-                        author_name = item.xpath(
-                            './/span[contains(@class, "feed_page--author--yzyAW")]/text()').get()
-                        likes_count = item.xpath(
-                            './/div[contains(@class, "feed_page--action__default_like--wLEVs")]/text()').get()
+                            './/a[contains(@class, "feed_page--resourceMetaAuthor")]/@href').get()
 
-                        try:
-                            likes_value = int(float(likes_count.lower().replace(",", "").replace(
-                                ".", "").replace("k", "000").replace("m", "000000")))
-                        except ValueError:
-                            likes_value = 0
+                        # .//span[contains(@class, "feed_page--author--yzyAW")]
+                        # => .//span[contains(@class, "feed_page--author")]
+                        author_name = item.xpath(
+                            './/span[contains(@class, "feed_page--author")]/text()').get()
+                        # .//div[contains(@class, "feed_page--action__default_like--wLEVs")]
+                        # => .//div[contains(@class, "actions")]/div[contains(@class, "like")]
+                        like_count = item.xpath(
+                            './/div[contains(@class, "actions")]/div[contains(@class, "like")]/text()').get()
+
+                        # .//div[contains(@class, "feed_page--newWindow--yr-g2")]
+                        # => .//div[contains(@class, "actions")]/button/text()
+                        duplicate_count = item.xpath(
+                            './/div[contains(@class, "actions")]/button/text()').get()
+
+                        like_count = tonum(like_count)
+                        duplicate_count = tonum(duplicate_count)
 
                         # Save the data as JSON
                         data = {
@@ -142,8 +155,11 @@ class FigmaSpider(scrapy.Spider):
                             "thumbnail": thumbnail,
                             "author_link": f"https://www.figma.com{author_link}",
                             "author_name": author_name,
-                            "likes_count": likes_value,
-                            "crawled_at": datetime.utcnow().isoformat()
+                            # TODO: rename to like_count
+                            "likes_count": like_count,
+                            "duplicate_count": duplicate_count,
+                            # drop the milliseconds
+                            "crawled_at": datetime.utcnow().replace(microsecond=0).isoformat()
                         }
 
                         scraped_data.append(data)
@@ -164,4 +180,18 @@ class FigmaSpider(scrapy.Spider):
             save_data()
 
     def close_spider(self, spider):
+        tqdm.write("Closing spider")
+        self.autosave_timer.cancel()
         self.driver.quit()
+        tqdm.write("Spider")
+
+
+def tonum(txt: str):
+    """
+    converts human friendly numbers to integers
+    """
+    try:
+        return int(float(txt.lower().replace(",", "").replace(
+            ".", "").replace("k", "000").replace("m", "000000")))
+    except ValueError:
+        return 0
