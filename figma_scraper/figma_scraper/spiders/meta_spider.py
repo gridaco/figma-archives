@@ -1,17 +1,29 @@
 import json
-import sys
+import os
 import jsonlines
 import scrapy
 import scrapy.http
-from selenium.webdriver.support import expected_conditions as EC
 from tqdm import tqdm
-from pathlib import Path
 
 
 class FigmaMetaSpider(scrapy.Spider):
     name = 'meta_spider'
     start_urls = []
     progress_bar: tqdm
+
+    custom_settings = {
+        # scraperapi settings
+        "SCRAPERAPI_KEY": os.getenv("SCRAPERAPI_KEY"),
+        "SCRAPERAPI_OPTIONS": {
+            'render': 'false',
+            'country_code': 'us'
+        },
+
+        'DOWNLOADER_MIDDLEWARES': {
+            'figma_scraper.middlewares.scraperapi.ScrapyScraperAPIMiddleware': 350,
+            'scrapy.downloadermiddlewares.httpproxy.HttpProxyMiddleware': 400,
+        }
+    }
 
     def __init__(self, index, **kwargs):
         max = kwargs.pop('max', None)
