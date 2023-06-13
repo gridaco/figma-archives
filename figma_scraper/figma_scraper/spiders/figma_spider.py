@@ -155,8 +155,7 @@ class FigmaSpider(scrapy.Spider):
                             "thumbnail": thumbnail,
                             "author_link": f"https://www.figma.com{author_link}",
                             "author_name": author_name,
-                            # TODO: rename to like_count
-                            "likes_count": like_count,
+                            "like_count": like_count,
                             "duplicate_count": duplicate_count,
                             # drop the milliseconds
                             "crawled_at": datetime.utcnow().replace(microsecond=0).isoformat()
