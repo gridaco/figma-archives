@@ -16,16 +16,24 @@ from datetime import datetime
 from tqdm import tqdm
 
 
+param_map = {
+    'recent': 'new',  # https://www.figma.com/community/files/figma/free/new
+    'trending': '',  # https://www.figma.com/community/files/figma/free/
+    'popular': 'popular'  # https://www.figma.com/community/files/figma/free/popular
+}
+
+
 class FigmaSpider(scrapy.Spider):
     name = 'figma_spider'
     start_urls = []
     progress_bar = tqdm(total=1, desc="Crawling items", position=0)
 
     def __init__(self, target='popular', **kwargs):
-        self.target = target  # recent, trending, popular , e.g. pass with -a target=recent
+        # recent, trending, popular , e.g. pass with -a target=recent
+        self.target = param_map[target]
         self.output = f'output.{target}.json'
         self.start_urls = [
-            f'https://www.figma.com/community/files/figma/free/{target}']
+            f'https://www.figma.com/community/files/figma/free/{self.target}']
         options = Options()
         options.add_argument("--headless")
         options.add_argument("--disable-gpu")

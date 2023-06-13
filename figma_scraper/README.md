@@ -7,6 +7,12 @@ scrapy crawl figma_spider --nolog -a target=recent
 scrapy crawl figma_spider --nolog -a target=popular
 ```
 
+**Sorting**
+
+- [popular](https://www.figma.com/community/files/figma/free/popular) - figma community lists the popular file with download (copies) count
+- [recent](https://www.figma.com/community/files/figma/free/new) - figma community lists the recent file with last updated date (not created date if initial upload)
+- [trending](https://www.figma.com/community/files/figma/free/) - the logic behind is unknown, but it seems to be based on recent number of copies
+
 ### Meta Spider
 
 ```bash
