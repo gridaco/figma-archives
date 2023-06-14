@@ -18,8 +18,8 @@ def cli():
     pass
 
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(
-    os.path.abspath(__file__))), 'data')  # path to data directory
+__dir = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(__dir, '../data')  # path to data directory
 
 cancelation_tokens_file = os.path.join(
     DATA_DIR, '.spider/index/crawler.lock')
@@ -61,7 +61,7 @@ def ci_index(timeout_minutes):
 
     now = datetime.now()
     iso_now = now.replace(microsecond=0).isoformat()
-    feed = f'out/index@{iso_now}.jsonl'
+    feed = os.path.join(__dir, f'out/index@{iso_now}.jsonl')
     log = f'out/spider-index-{iso_now}.log'
 
     def spider_closed(spider):
@@ -136,7 +136,7 @@ def crawl_meta(timeout_minutes, index: list):
 
     now = datetime.now()
     iso_now = now.replace(microsecond=0).isoformat()
-    feed = f'out/meta@{iso_now}.jsonl'
+    feed = os.path.join(__dir, f'out/meta@{iso_now}.jsonl')
     # log = f'out/spider-meta-{iso_now}.log'
 
     process = CrawlerProcess({
@@ -153,7 +153,7 @@ def crawl_meta(timeout_minutes, index: list):
         },
     })
 
-    process.crawl(meta_spider.FigmaMetaSpider, index=index, proxy=True)
+    process.crawl(meta_spider.FigmaMetaSpider, index=index)
     process.start()  # the script will block here until the crawling is finished
 
     print("Crawling meta finished.")

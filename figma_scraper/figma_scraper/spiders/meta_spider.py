@@ -90,7 +90,6 @@ class FigmaMetaSpider(scrapy.Spider):
 
     def __init__(self, index, **kwargs):
         max = kwargs.pop('max', None)
-        proxy = kwargs.pop('proxy', False)
 
         # read the index file, seed the start_urls
         if type(index) == str:
@@ -110,28 +109,6 @@ class FigmaMetaSpider(scrapy.Spider):
 
         if max:
             self.start_urls = self.start_urls[:int(max)]
-
-        if proxy:
-            # ensure api key provided
-            SCRAPERAPI_KEY = os.getenv("SCRAPERAPI_KEY")
-            if not SCRAPERAPI_KEY:
-                raise Exception(
-                    'SCRAPERAPI_KEY must be provided when using proxy')
-
-            self.custom_settings = {
-                # scraperapi settings
-                "SCRAPERAPI_KEY": SCRAPERAPI_KEY,
-                "SCRAPERAPI_OPTIONS": {
-                    'render': 'false',
-                    'country_code': 'us'
-                },
-
-                'DOWNLOADER_MIDDLEWARES': {
-                    'figma_scraper.middlewares.scraperapi.ScrapyScraperAPIMiddleware': 350,
-                    'scrapy.downloadermiddlewares.httpproxy.HttpProxyMiddleware': 400,
-                }
-            }
-
 
         CI = os.getenv("CI")
         # setup selenium
@@ -154,7 +131,6 @@ class FigmaMetaSpider(scrapy.Spider):
 
     def start_requests(self):
         for url in self.start_urls:
-            print(url)
             self.driver.get(url)
             # wait for the page to load
             # check if div with id 'react-page' is present
