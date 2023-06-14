@@ -2,7 +2,7 @@ name: Figma Index Spider
 
 on:
   push:
-    branches: [main]
+    branches: [meta]
   schedule:
     - cron: "0 */4 * * *" # Run this workflow every 4 hours
 
@@ -23,11 +23,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.ci.crawl.txt
+      - name: Install xvfb
+        run: sudo apt-get install xvfb
       - name: Run Scrapy spider
         run: |
           cd figma_scraper
           # total 10 min, 2 min for bootup, 8 min for scraping
-          python ci.py index --timeout-minutes 8
+          python ci.py all --timeout-minutes 8
       - name: Commit and push if it's necessary
         run: |
           git config --global user.email "github@grida.co"
