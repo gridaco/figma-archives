@@ -4,12 +4,13 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: "0 */12 * * *" # Run this workflow every 12 hours
+    - cron: "0 */4 * * *" # Run this workflow every 4 hours
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    # cost estimation = 10(minute) * 2(times) * 30(month) * 0.008(1minute cost) = 4.8$/month
+    # (max) cost estimation = 10(minute) * 6(times) * 30(month) * 0.008(1minute cost) = 14.4$/month
+    # (min) cost estimation = 3(minute) * 6(times) * 30(month) * 0.008(1minute cost) = 4.3$/month
     # 10 minute seems quite tight, but we only scrape until last new file is found, so it should be fine
     timeout-minutes: 10
     steps:
@@ -33,5 +34,5 @@ jobs:
           git config --global user.email "github@grida.co"
           git config --global user.name "gridabot"
           git add data/*
-          git diff-index --quiet HEAD || git commit -m "Update data"
+          git diff-index --quiet HEAD || git commit -m "ci: figma community index (recent) @ $(date "+%Y-%m-%d %H:%M:%S")"
           git push
