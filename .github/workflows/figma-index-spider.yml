@@ -23,12 +23,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.ci.selenium.txt
-      # - name: Setup ChromeDriver
-      #   uses: nanasess/setup-chromedriver@v1.0.1
       - name: Run Scrapy spider
         run: |
           cd figma_scraper
-          python ci.py
+          # total 10 min, 2 min for bootup, 8 min for scraping
+          python ci.py --timeout-minutes 8
       - name: Commit and push if it's necessary
         run: |
           git config --global user.email "github@grida.co"

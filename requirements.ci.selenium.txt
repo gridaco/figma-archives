@@ -1,3 +1,4 @@
+click
 selenium
 scrapy
 webdriver-manager

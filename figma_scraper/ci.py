@@ -1,3 +1,4 @@
+import click
 from datetime import datetime
 import json
 import os
@@ -30,7 +31,9 @@ def set_cancelation_tokens(tokens):
         return True
 
 
-def main():
+@click.command()
+@click.option('--timeout-minutes', default=0, help='Timeout in minutes (0 for no timeout)')
+def main(timeout_minutes):
     cancelation_tokens = get_cancelation_tokens()
     cancelation_tokens_count = len(cancelation_tokens)
 
@@ -39,6 +42,7 @@ def main():
     now = datetime.now()
     iso_now = now.replace(microsecond=0).isoformat()
     feed = f'output.recent@{iso_now}.jsonl'
+    feed_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), feed)
 
     def spider_closed(spider):
         # put your logic here
@@ -57,8 +61,12 @@ def main():
         "LOG_ENABLED": True,
         "LOG_FILE": f"scrapy-{iso_now}.log",
         "LOG_LEVEL": "WARNING",
+        "CLOSESPIDER_TIMEOUT": timeout_minutes * 60,
         "FEEDS": {
-            feed: {"format": "jsonl"},
+            feed_path: {
+                "format": "jsonlines",
+                "encoding": "utf8",
+            },
         },
     })
 
@@ -72,7 +80,7 @@ def main():
 
     # after closed.
     # read the feed file, compare with the main index file, add new items to the main index file
-    with open(feed, "r", encoding="utf-8") as f:
+    with open(feed_path, "r", encoding="utf-8") as f:
         data_scraped = [json.loads(line) for line in f]
         ids_scraped = set([item['id'] for item in data_scraped])
 
