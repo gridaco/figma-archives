@@ -1,3 +1,5 @@
+from datetime import datetime
+import click
 import json
 import os
 from scrapy import signals
@@ -29,12 +31,16 @@ def set_cancelation_tokens(tokens):
         return True
 
 
+@click.command("index")
 def main():
     cancelation_tokens = get_cancelation_tokens()
     cancelation_tokens_count = len(cancelation_tokens)
 
     sort = 'recent'
-    feed = 'output.recent.jsonl'
+
+    now = datetime.now()
+    iso_now = now.replace(microsecond=0).isoformat()
+    feed = f'output.recent@{iso_now}.jsonl'
 
     def spider_closed(spider):
         # put your logic here
@@ -51,7 +57,7 @@ def main():
     process = CrawlerProcess({
         **get_project_settings(),
         "LOG_ENABLED": True,
-        "LOG_FILE": "scrapy.log",
+        "LOG_FILE": f"scrapy-{iso_now}.log",
         "LOG_LEVEL": "WARNING",
         "FEEDS": {
             feed: {"format": "jsonl"},
@@ -87,11 +93,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-    # try:
-    #     with open(self.output, "r", encoding="utf-8") as f:
-    #         for line in f:
-    #             data = json.loads(line)
-    #             scraped_data.append(data)
-    # except FileNotFoundError:
-    #     pass

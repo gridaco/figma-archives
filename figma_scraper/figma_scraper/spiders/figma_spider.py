@@ -129,6 +129,8 @@ class FigmaSpider(scrapy.Spider):
                 scrapy_selector = Selector(text=source)
 
                 # Extract items
+                # while this being a infinite scrolling, it is not optimal to use full xpath scan on the entire page
+                # TODO: use xpath index to cut down the search space
                 # //div[contains(@class, "feed_page--feedGrid--QViml")]/div
                 # => //div[contains(@class, "feedGrid")]/div
                 items = scrapy_selector.xpath(
