@@ -160,7 +160,7 @@ def crawl_meta(timeout_minutes, index: list):
     # after finished
 
     # read the feed jsonlines
-    with jsonlines.open(feed, "r", encoding="utf-8") as reader:
+    with jsonlines.open(feed) as reader:
         data = [item for item in reader]
         print(f"Meta data: {len(data)}")
 
