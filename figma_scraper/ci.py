@@ -1,3 +1,4 @@
+import json
 import os
 from scrapy import signals
 from scrapy.signalmanager import dispatcher
@@ -10,6 +11,8 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(
 
 cancelation_tokens_file = os.path.join(
     DATA_DIR, '.spider/index/crawler.lock')
+
+index_file = os.path.join(DATA_DIR, 'latest/index.json')
 
 
 def get_cancelation_tokens():
@@ -65,6 +68,21 @@ def main():
 
     # after closed.
     # read the feed file, compare with the main index file, add new items to the main index file
+    with open(feed, "r", encoding="utf-8") as f:
+        data_scraped = [json.loads(line) for line in f]
+        ids_scraped = set([item['id'] for item in data_scraped])
+    with open(index_file, "a+", encoding="utf-8") as f:
+        data_existing = [json.loads(line) for line in f]
+        ids_existing = set([item['id'] for item in data_existing])
+
+        # filter out existing ids from scraped ids
+        ids_new = ids_scraped - ids_existing
+
+        # filter out scraped data with existing ids
+        data_new = [item for item in data_scraped if item['id'] in ids_new]
+
+        # append new data to the main index file
+        f.write("\n".join([json.dumps(item) for item in data_new]))
 
 
 if __name__ == "__main__":
