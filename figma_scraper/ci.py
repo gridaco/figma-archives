@@ -137,13 +137,13 @@ def crawl_meta(timeout_minutes, index: list):
     now = datetime.now()
     iso_now = now.replace(microsecond=0).isoformat()
     feed = f'out/meta@{iso_now}.jsonl'
-    log = f'out/spider-meta-{iso_now}.log'
+    # log = f'out/spider-meta-{iso_now}.log'
 
     process = CrawlerProcess({
         **get_project_settings(),
         "LOG_ENABLED": True,
-        "LOG_FILE": log,
-        "LOG_LEVEL": "WARNING",
+        # "LOG_FILE": log,
+        "LOG_LEVEL": "ERROR",
         "CLOSESPIDER_TIMEOUT": timeout_minutes * 60,
         "FEEDS": {
             feed: {
