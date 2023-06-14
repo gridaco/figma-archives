@@ -11,29 +11,44 @@ class FigmaMetaSpider(scrapy.Spider):
     start_urls = []
     progress_bar: tqdm
 
-    custom_settings = {
-        # scraperapi settings
-        "SCRAPERAPI_KEY": os.getenv("SCRAPERAPI_KEY"),
-        "SCRAPERAPI_OPTIONS": {
-            'render': 'false',
-            'country_code': 'us'
-        },
-
-        'DOWNLOADER_MIDDLEWARES': {
-            'figma_scraper.middlewares.scraperapi.ScrapyScraperAPIMiddleware': 350,
-            'scrapy.downloadermiddlewares.httpproxy.HttpProxyMiddleware': 400,
-        }
-    }
-
     def __init__(self, index, **kwargs):
         max = kwargs.pop('max', None)
+        proxy = kwargs.pop('proxy', False)
 
         # read the index file, seed the start_urls
-        with jsonlines.open(index) as reader:
-            self.start_urls = [x['link'] for x in reader]
+        if type(index) == str:
+            with jsonlines.open(index) as reader:
+                self.start_urls = [x['link'] for x in reader]
+        # also accepts the data parsed from the index file externally
+        elif type(index) == list:
+            self.start_urls = [x['link'] for x in index]
+        else:
+            raise Exception(
+                'index must be a path to a jsonl file or a list of objects')
 
         if max:
             self.start_urls = self.start_urls[:int(max)]
+
+        if proxy:
+            # ensure api key provided
+            SCRAPERAPI_KEY = os.getenv("SCRAPERAPI_KEY")
+            if not SCRAPERAPI_KEY:
+                raise Exception(
+                    'SCRAPERAPI_KEY must be provided when using proxy')
+
+            self.custom_settings = {
+                # scraperapi settings
+                "SCRAPERAPI_KEY": SCRAPERAPI_KEY,
+                "SCRAPERAPI_OPTIONS": {
+                    'render': 'false',
+                    'country_code': 'us'
+                },
+
+                'DOWNLOADER_MIDDLEWARES': {
+                    'figma_scraper.middlewares.scraperapi.ScrapyScraperAPIMiddleware': 350,
+                    'scrapy.downloadermiddlewares.httpproxy.HttpProxyMiddleware': 400,
+                }
+            }
 
         # index_name = Path(index).stem
         # output = Path(f'./data/{index_name}.meta.json')
@@ -57,6 +72,7 @@ class FigmaMetaSpider(scrapy.Spider):
         data = json.loads(text)
 
         INITIAL_OPTIONS = data['INITIAL_OPTIONS']
+        print(json.dumps(INITIAL_OPTIONS))
         community_preloads = INITIAL_OPTIONS['community_preloads']
         hub_file = community_preloads['hub_file']
         hub_file_publisher = hub_file['publisher']
