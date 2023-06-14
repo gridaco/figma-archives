@@ -33,6 +33,6 @@ jobs:
         run: |
           git config --global user.email "github@grida.co"
           git config --global user.name "gridabot"
-          git add data/*
+          git add --all data/
           git diff-index --quiet HEAD || git commit -m "ci: figma community index (recent) @ $(date "+%Y-%m-%d %H:%M:%S")"
           git push
