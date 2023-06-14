@@ -1,2 +1,2 @@
 .scrapy
-output*.json
+output*.json*
