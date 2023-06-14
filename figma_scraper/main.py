@@ -9,7 +9,7 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), 'data')  # path to data directory
 
 cancelation_tokens_file = os.path.join(
-    DATA_DIR, 'latest', '.spider/index-cancelation-tokens.txt')
+    DATA_DIR, '.spider/index/crawler.lock')
 
 
 def get_cancelation_tokens():

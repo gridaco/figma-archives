@@ -21,7 +21,7 @@ Providing a cancelation token for `recent` is tricky. Since recent both contains
 
 To overcome this, we provide lastest n items as a cancelation token. if all n items are found on the second entry, the spider will stop, n being 30 (items diplayed in a single page scrol) by default, for cron job that runs twice a day, it can be smaller on shorter interval. - explanation? - the chances are very low that all n items are updated in next interval.
 
-These cancelation tokens are saved at [data/.spider/index-cancelation-tokens.json](../data/.spider/index-cancelation-tokens.json), being replaced with the first n items on the next crawl, after all items are saved. and referenced as a new cancelation tokens on the next run.
+These cancelation tokens are saved at [data/.spider/index/crawler.lock](../data/.spider/index/crawler.lock), being replaced with the first n items on the next crawl, after all items are saved. and referenced as a new cancelation tokens on the next run.
 
 You can see index spider cron job at [.github/workflows/figma-index.spider.yml](../.github/workflows/figma-index-spider.yml)
 
