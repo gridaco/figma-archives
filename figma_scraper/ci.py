@@ -8,6 +8,12 @@ from scrapy.crawler import CrawlerProcess
 from scrapy.utils.project import get_project_settings
 from figma_scraper.spiders.figma_spider import FigmaSpider  # import your spider here
 
+
+@click.group()
+def cli():
+    pass
+
+
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), 'data')  # path to data directory
 
@@ -31,9 +37,9 @@ def set_cancelation_tokens(tokens):
         return True
 
 
-@click.command()
+@cli.command('index')
 @click.option('--timeout-minutes', default=0, help='Timeout in minutes (0 for no timeout)')
-def main(timeout_minutes):
+def ci_index(timeout_minutes):
     cancelation_tokens = get_cancelation_tokens()
     cancelation_tokens_count = len(cancelation_tokens)
 
@@ -104,5 +110,10 @@ def main(timeout_minutes):
         f.write("\n")
 
 
+@cli.command("meta")
+def ci_meta():
+    ...
+
+
 if __name__ == "__main__":
-    main()
+    cli()

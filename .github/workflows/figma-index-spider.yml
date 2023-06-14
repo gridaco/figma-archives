@@ -27,7 +27,7 @@ jobs:
         run: |
           cd figma_scraper
           # total 10 min, 2 min for bootup, 8 min for scraping
-          python ci.py --timeout-minutes 8
+          python ci.py index --timeout-minutes 8
       - name: Commit and push if it's necessary
         run: |
           git config --global user.email "github@grida.co"
