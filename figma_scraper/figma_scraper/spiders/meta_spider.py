@@ -14,6 +14,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
+from pyvirtualdisplay import Display
 
 
 def parse_from_next_script_props(text):
@@ -33,8 +34,6 @@ def parse_from_next_script_props(text):
     version = latest_version['version']  # 1, 2, 3, etc
     name = latest_version['name']
     description = latest_version['description']  # html long description
-
-
 
     # list of co-publishers id
     community_publishers = [x['id']
@@ -83,6 +82,7 @@ def parse_from_next_script_props(text):
 
     return data
 
+
 class FigmaMetaSpider(scrapy.Spider):
     name = 'meta_spider'
     start_urls = []
@@ -102,11 +102,12 @@ class FigmaMetaSpider(scrapy.Spider):
         else:
             raise Exception(
                 'index must be a path to a jsonl file or a list of objects')
-        
+
         # e.g. https://embed.figma.com/file/1035203688168086460/hf_embed?community_viewer=true&embed_host=hub_file_detail_view&hide_ui=true&hub_file_id=1035203688168086460&kind=&viewer=1
         # we use embed.figma.com url since there the url provides the metadata in next script tag
-        self.start_urls = [f"https://embed.figma.com/file/{id}/hf_embed?community_viewer=true&embed_host=hub_file_detail_view&hide_ui=true&hub_file_id={id}&kind=&viewer=1" for id in ids]
-        
+        self.start_urls = [
+            f"https://embed.figma.com/file/{id}/hf_embed?community_viewer=true&embed_host=hub_file_detail_view&hide_ui=true&hub_file_id={id}&kind=&viewer=1" for id in ids]
+
         if max:
             self.start_urls = self.start_urls[:int(max)]
 
@@ -131,10 +132,19 @@ class FigmaMetaSpider(scrapy.Spider):
                 }
             }
 
+
+        CI = os.getenv("CI")
         # setup selenium
         options = Options()
-        # options.add_argument("--headless")
-        # options.add_argument("--disable-gpu")
+
+        if CI:
+            # this spider crawls figma embed page, which requires a webgl enabled browser, won't work if headless mode.
+            # you can set size to whatever you like
+            display = Display(visible=0, size=(800, 600))
+            display.start()
+        else:
+            ...
+
         self.driver = webdriver.Chrome(service=Service(
             executable_path=ChromeDriverManager().install()), options=options)
         # wait extra to ensure the page is loaded
@@ -150,7 +160,7 @@ class FigmaMetaSpider(scrapy.Spider):
             # check if div with id 'react-page' is present
             WebDriverWait(self.driver, 5).until(
                 EC.presence_of_element_located((By.ID, "react-page")))
-            
+
             body = self.driver.page_source
             yield scrapy.Request(url, self.parse, dont_filter=True, meta={'body': body})
 
