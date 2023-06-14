@@ -2,6 +2,7 @@ import threading
 import click
 from datetime import datetime
 import json
+import jsonlines
 import os
 from scrapy import signals
 from scrapy.signalmanager import dispatcher
@@ -157,6 +158,11 @@ def crawl_meta(timeout_minutes, index: list):
 
     print("Crawling meta finished.")
     # after finished
+
+    # read the feed jsonlines
+    with jsonlines.open(feed, "r", encoding="utf-8") as reader:
+        data = [item for item in reader]
+        print(f"Meta data: {len(data)}")
 
 
 @cli.command("all")
