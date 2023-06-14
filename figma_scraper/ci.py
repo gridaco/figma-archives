@@ -1,5 +1,4 @@
 from datetime import datetime
-import click
 import json
 import os
 from scrapy import signals
@@ -31,7 +30,6 @@ def set_cancelation_tokens(tokens):
         return True
 
 
-@click.command("index")
 def main():
     cancelation_tokens = get_cancelation_tokens()
     cancelation_tokens_count = len(cancelation_tokens)
