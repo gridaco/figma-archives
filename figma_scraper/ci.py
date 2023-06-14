@@ -77,7 +77,9 @@ def main():
     with open(feed, "r", encoding="utf-8") as f:
         data_scraped = [json.loads(line) for line in f]
         ids_scraped = set([item['id'] for item in data_scraped])
+
     with open(index_file, "a+", encoding="utf-8") as f:
+        f.seek(0)  # move the file pointer to the beginning of the file
         data_existing = [json.loads(line) for line in f]
         ids_existing = set([item['id'] for item in data_existing])
 
@@ -87,8 +89,13 @@ def main():
         # filter out scraped data with existing ids
         data_new = [item for item in data_scraped if item['id'] in ids_new]
 
+        # move the file pointer back to the end of the file
+        f.seek(0, os.SEEK_END)
+
         # append new data to the main index file
         f.write("\n".join([json.dumps(item) for item in data_new]))
+        # write trailing newline
+        f.write("\n")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,37 @@
+name: Figma Index Spider
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 */12 * * *" # Run this workflow every 12 hours
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # cost estimation = 10(minute) * 2(times) * 30(month) * 0.008(1minute cost) = 4.8$/month
+    # 10 minute seems quite tight, but we only scrape until last new file is found, so it should be fine
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.10
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      # - name: Setup ChromeDriver
+      #   uses: nanasess/setup-chromedriver@v1.0.1
+      - name: Run Scrapy spider
+        run: |
+          cd figma_scraper
+          python ci.py
+      - name: Commit and push if it's necessary
+        run: |
+          git config --global user.email "github@grida.co"
+          git config --global user.name "gridabot"
+          git add data/*
+          git diff-index --quiet HEAD || git commit -m "Update data"
+          git push

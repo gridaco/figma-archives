@@ -84,8 +84,12 @@ class FigmaSpider(scrapy.Spider):
     def should_cancel(self):
         if self.has_cancel:
             # check if scraped_ids contains all cancelation_tokens (set inclusion)
-            da = self.cancelation_tokens.issubset(self.scraped_ids)
-            return da
+            if self.cancelation_tokens.issubset(self.scraped_ids):
+                return True
+            else:
+                # there is a chace that the previous tokens are removed, we take that into account
+                # we use threshold of 0.8 - 80% of the tokens should be in the scraped_ids
+                return len(self.cancelation_tokens.intersection(self.scraped_ids)) / len(self.cancelation_tokens) > 0.8
         else:
             return False
 
