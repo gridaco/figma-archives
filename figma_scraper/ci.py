@@ -47,8 +47,8 @@ def ci_index(timeout_minutes):
 
     now = datetime.now()
     iso_now = now.replace(microsecond=0).isoformat()
-    feed = f'output.recent@{iso_now}.jsonl'
-    feed_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), feed)
+    feed = f'out/output.recent@{iso_now}.jsonl'
+    log = f'out/spider-index-{iso_now}.log'
 
     def spider_closed(spider):
         # put your logic here
@@ -65,11 +65,11 @@ def ci_index(timeout_minutes):
     process = CrawlerProcess({
         **get_project_settings(),
         "LOG_ENABLED": True,
-        "LOG_FILE": f"scrapy-{iso_now}.log",
+        "LOG_FILE": log,
         "LOG_LEVEL": "WARNING",
         "CLOSESPIDER_TIMEOUT": timeout_minutes * 60,
         "FEEDS": {
-            feed_path: {
+            feed: {
                 "format": "jsonlines",
                 "encoding": "utf8",
             },
@@ -86,7 +86,7 @@ def ci_index(timeout_minutes):
 
     # after closed.
     # read the feed file, compare with the main index file, add new items to the main index file
-    with open(feed_path, "r", encoding="utf-8") as f:
+    with open(feed, "r", encoding="utf-8") as f:
         data_scraped = [json.loads(line) for line in f]
         ids_scraped = set([item['id'] for item in data_scraped])
 
