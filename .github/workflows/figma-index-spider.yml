@@ -2,7 +2,7 @@ name: Figma Index Spider
 
 on:
   push:
-    branches: [meta]
+    branches: [main]
   schedule:
     - cron: "0 */4 * * *" # Run this workflow every 4 hours
 
