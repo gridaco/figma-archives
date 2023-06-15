@@ -223,9 +223,9 @@ def ci_all(timeout_minutes, mock_ci):
 
     CI = os.environ.get('CI', False)
 
-    # 8:2 allocation
-    spider_index_timeout_factor = 0.8
-    spider_meta_timeout_factor = 0.2
+    # 6:4 allocation
+    spider_index_timeout_factor = 0.6
+    spider_meta_timeout_factor = 0.4
 
     ctx = click.Context(ci_index)
     data = ctx.invoke(ci_index, timeout_minutes=timeout_minutes *
