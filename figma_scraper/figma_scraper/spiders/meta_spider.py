@@ -92,6 +92,10 @@ class FigmaMetaSpider(scrapy.Spider):
 
         # e.g. https://embed.figma.com/file/1035203688168086460/hf_embed?community_viewer=true&embed_host=hub_file_detail_view&hide_ui=true&hub_file_id=1035203688168086460&kind=&viewer=1
         # we use embed.figma.com url since there the url provides the metadata in next script tag
+        # where is this url from? -> in details page (a), inspect the iframe, the src is the url (b), in b, there is a second iframe, the src is the url (c), in c, there is a script tag with data-initial, which contains the metadata
+        # (a) - https://www.figma.com/community/file/1035203688168086460
+        # (b) - https://www.figma.com/community/file/1035203688168086460/embed
+        # (c) - https://embed.figma.com/file/1035203688168086460/hf_embed?community_viewer=true&embed_host=hub_file_detail_view&hide_ui=true&hub_file_id=1035203688168086460&kind=&viewer=1
         self.start_urls = [
             f"https://embed.figma.com/file/{id}/hf_embed?community_viewer=true&embed_host=hub_file_detail_view&hide_ui=true&hub_file_id={id}&kind=&viewer=1" for id in ids]
 
