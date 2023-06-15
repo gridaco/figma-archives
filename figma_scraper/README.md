@@ -31,9 +31,10 @@ This workflow isn't meant to crawl all data from scratch, but instead it is only
 
 ```bash
 scrapy crawl meta_spider --nolog
-\ -a index='output.popular.json'
-\ -o output.popular.meta.json
+\ -a index='output.popular.jsonl'
+\ -o output.popular.meta.jsonl
 ```
 
 <!-- For us, the maintainers -->
-<!-- scrapy crawl meta_spider --nolog -a index='../data/latest/index.json' -o ../data/latest/meta.json -->
+<!-- scrapy crawl meta_spider --nolog -a index='../data/latest/index.json' -o ../data/latest/meta.jsonl -->
+<!-- but we should mainly use ci.py in most cases -->

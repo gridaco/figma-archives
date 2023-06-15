@@ -14,7 +14,7 @@ Doing this will convert each item's `:filekey` to the original community id from
 python3 sampler.py
   \ --index='path-to-index.json'
   \ --map='path-to-map.json'
-  \ --meta='path-to-meta.json'
+  \ --meta='path-to-meta.jsonl'
   \ --output='path-to-out-dir'
   \ --dir-files-archive='path-to-files-archive'
   \ --dir-images-archive'path-to-images-archives'

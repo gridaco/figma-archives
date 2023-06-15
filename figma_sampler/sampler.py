@@ -15,7 +15,7 @@ logging.basicConfig(filename='error-files.log', level=logging.ERROR)
 
 
 @click.command()
-@click.option('--index', required=True, type=click.Path(exists=True), help='Path to index file (JSONL) or index directory with (index.json, map.json, meta.json)')
+@click.option('--index', required=True, type=click.Path(exists=True), help='Path to index file (JSONL) or index directory with (index.json, map.json, meta.jsonl)')
 @click.option('--map', required=False, type=click.Path(exists=True), help='Path to map file (JSON)')
 @click.option('--meta', required=False, type=click.Path(exists=True), help='Path to meta file (JSON)')
 @click.option('--output', required=True, type=click.Path(), help='Path to output directory')
@@ -58,9 +58,9 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, dir_im
     # check if index is a directory
     if index.is_dir():
         index_dir = index
-        index = index_dir / "index.json"
-        map = index_dir / "map.json"
-        meta = index_dir / "meta.json"
+        index = index_dir / "index.json"  # jsonlines
+        meta = index_dir / "meta.jsonl"  # jsonlines
+        map = index_dir / "map.json"  # json
     else:
         # ensure map and meta are provided
         if map is None or meta is None:
@@ -72,16 +72,17 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, dir_im
         # get id, link, title
         index_data = [(obj["id"], obj["link"], obj["title"]) for obj in reader]
 
+    # Read meta file
+    with jsonlines.open(meta, mode='r') as reader:
+        # it is a array of objects with id, name, description, version, ...
+        meta_data = {}
+        for obj in reader:
+            # Now, convert it to key-value pair with id as key
+            meta_data[obj["id"]] = obj
+
     # Read map file
     with open(map, 'r') as f:
         map_data = json.load(f)
-
-    # Read meta file
-    with open(meta, 'r') as f:
-        # it is a array of objects with id, name, description, version, ...
-        meta_data = json.load(f)
-        # now, convert it to key-value pair with id as key
-        meta_data = {obj["id"]: obj for obj in meta_data}
 
     # create root output dir
     output = Path(output)
@@ -231,7 +232,7 @@ def main(index, map, meta, output, dir_files_archive, dir_images_archive, dir_im
     if only_images:
         # if only images, remove all files under top level directories
         for dir in tqdm(output.iterdir(), desc='🗑️', leave=True, colour='white'):
-            # meta.json, map.json, file.json (or file.json.gz) are not images
+            # meta.json, map.json, file.json (or .json.gz abd .jsonl) are not images
             for file in dir.glob('*.json*'):
                 file.unlink()
 
