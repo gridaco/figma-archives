@@ -160,39 +160,44 @@ def crawl_meta(timeout_minutes, index: list):
     process.start()  # the script will block here until the crawling is finished
 
     print("Crawling meta finished.")
+    
     # after finished
-
-    # read the feed jsonlines
+   
+    # read the feed jsonlines and store in a dictionary for quick lookup
     with jsonlines.open(feed) as reader:
-        new_data = [item for item in reader]
-        print(f"Meta data: {len(new_data)}")
+        new_data = {item["id"]: item for item in reader}
+    print(f"New data: {len(new_data)}")
 
-    # update the master meta file
-    # master meta file is a jsonlines file as well
-    with jsonlines.open(feed) as reader:
-        data_existing = [item for item in reader]
+    updated_data = []
+    existing_ids = set()
+    updated_count = 0
+    new_count = 0
 
-    data_map: dict[str, dict] = {item["id"]: item for item in data_existing}
+    # open the master meta file and update in place if necessary
+    with jsonlines.open(master_meta_file) as reader:
+        for item in reader:
+            existing_ids.add(item["id"])
+            # if the item exists in the new data, update the item
+            if item["id"] in new_data:
+                item.update(new_data[item["id"]])
+                updated_count += 1
+            updated_data.append(item)
 
-    # for meta, we don't need to filter out existing ids, we update all as new. (version might have changed)
-    # replace the existing meta with the new one (or add if not exists)
-    # update data with new_data
-    for item in new_data:
-        if item["id"] in data_map:
-            # update existing item
-            data_map[item["id"]].update(item)
-        else:
-            # add new item
-            data_map[item["id"]] = item
-
-    # convert updated data back to a list
-    updated_data = list(data_map.values())
-
-    # FIXME: this will change the order of items when saving
+    # append new items at the end of updated_data
+    for item_id, item in new_data.items():
+        if item_id not in existing_ids:
+            updated_data.append(item)
+            new_count += 1
 
     # save the updated data to the master meta file
     with jsonlines.open(master_meta_file, mode='w') as writer:
         writer.write_all(updated_data)
+
+    print(f"Original data count: {len(existing_ids)}")
+    print(f"Updated data count: {updated_count}")
+    print(f"Newly inserted data count: {new_count}")
+    print(f"Final data count: {len(updated_data)}")
+
 
 
 @cli.command("all")
