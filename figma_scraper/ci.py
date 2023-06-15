@@ -25,7 +25,7 @@ cancelation_tokens_file = os.path.join(
     DATA_DIR, '.spider/index/crawler.lock')
 
 master_index_file = os.path.join(DATA_DIR, 'latest/index.json')
-master_meta_file = os.path.join(DATA_DIR, 'latest/meta.json')
+master_meta_file = os.path.join(DATA_DIR, 'latest/meta.jsonl')
 
 
 def get_cancelation_tokens():
@@ -125,6 +125,9 @@ def ci_index(timeout_minutes):
         # write trailing newline
         f.write("\n")
 
+    print(
+        f"Crawling index finished. Total: {len(ids_scraped)}, New Items discovered: {len(ids_new)}")
+
     return {
         "feed": feed,
         "data": data_new,
@@ -161,8 +164,35 @@ def crawl_meta(timeout_minutes, index: list):
 
     # read the feed jsonlines
     with jsonlines.open(feed) as reader:
-        data = [item for item in reader]
-        print(f"Meta data: {len(data)}")
+        new_data = [item for item in reader]
+        print(f"Meta data: {len(new_data)}")
+
+    # update the master meta file
+    # master meta file is a jsonlines file as well
+    with jsonlines.open(feed) as reader:
+        data_existing = [item for item in reader]
+
+    data_map: dict[str, dict] = {item["id"]: item for item in data_existing}
+
+    # for meta, we don't need to filter out existing ids, we update all as new. (version might have changed)
+    # replace the existing meta with the new one (or add if not exists)
+    # update data with new_data
+    for item in new_data:
+        if item["id"] in data_map:
+            # update existing item
+            data_map[item["id"]].update(item)
+        else:
+            # add new item
+            data_map[item["id"]] = item
+
+    # convert updated data back to a list
+    updated_data = list(data_map.values())
+
+    # FIXME: this will change the order of items when saving
+
+    # save the updated data to the master meta file
+    with jsonlines.open(master_meta_file, mode='w') as writer:
+        writer.write_all(updated_data)
 
 
 @cli.command("all")
@@ -180,9 +210,12 @@ def ci_all(timeout_minutes):
     data = ctx.invoke(ci_index, timeout_minutes=timeout_minutes *
                       spider_index_timeout_factor)
 
-    # new data from the index spider
-    index_data = data['data']
-    print(f"Index data: {len(index_data)}")
+    # data from the index spider
+    index_data = data['data*']
+    index_data_new = data['data']
+
+    print(
+        f"Using `data*` {len(index_data)} for meta spider (including new discovered items {len(index_data_new)})")
 
     # since scrapy does not allow running multiple crawler processes in the same thread,
     # we have to run the meta spider in a separate process
