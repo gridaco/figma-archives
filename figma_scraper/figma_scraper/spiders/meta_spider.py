@@ -1,20 +1,8 @@
 import json
-import os
-import time
 import jsonlines
 import scrapy
 import scrapy.http
-from scrapy.selector import Selector
 from tqdm import tqdm
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
-from pyvirtualdisplay import Display
 
 
 def parse_from_next_script_props(text):
@@ -110,40 +98,11 @@ class FigmaMetaSpider(scrapy.Spider):
         if max:
             self.start_urls = self.start_urls[:int(max)]
 
-        CI = os.getenv("CI")
-        # setup selenium
-        options = Options()
-
-        if CI:
-            # this spider crawls figma embed page, which requires a webgl enabled browser, won't work if headless mode.
-            # you can set size to whatever you like
-            display = Display(visible=0, size=(800, 600))
-            display.start()
-        else:
-            ...
-
-        self.driver = webdriver.Chrome(service=Service(
-            executable_path=ChromeDriverManager().install()), options=options)
-        # wait extra to ensure the page is loaded
-
         self.progress_bar = tqdm(
             total=len(self.start_urls), position=0)
 
-    def start_requests(self):
-        for url in self.start_urls:
-            self.driver.get(url)
-            # wait for the page to load
-            # check if div with id 'react-page' is present
-            WebDriverWait(self.driver, 5).until(
-                EC.presence_of_element_located((By.ID, "react-page")))
-
-            body = self.driver.page_source
-            yield scrapy.Request(url, self.parse, dont_filter=True, meta={'body': body})
-
     def parse(self, response: scrapy.http.Response):
-        body = response.meta['body']
-        selector = Selector(text=body)
-        di = selector.xpath('//script/@data-initial')
+        di = response.xpath('//script/@data-initial')
         text = di.get()
         data = parse_from_next_script_props(text)
 
@@ -151,6 +110,3 @@ class FigmaMetaSpider(scrapy.Spider):
         tqdm.write(f"☑ {response.url}")
 
         yield data
-
-    def close(self, reason):
-        self.driver.close()

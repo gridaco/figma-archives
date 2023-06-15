@@ -1,5 +1,4 @@
 selenium
-pyvirtualdisplay
 scrapy
 webdriver-manager
 click

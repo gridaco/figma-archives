@@ -3,4 +3,3 @@ selenium
 scrapy
 webdriver-manager
 jsonlines
-pyvirtualdisplay
