@@ -1,4 +1,4 @@
-import threading
+import subprocess
 import click
 from datetime import datetime
 import json
@@ -135,7 +135,7 @@ def ci_index(timeout_minutes):
     }
 
 
-def crawl_meta(timeout_minutes, index: list):
+def update_meta(timeout_minutes, index: list):
 
     now = datetime.now()
     iso_now = now.replace(microsecond=0).isoformat()
@@ -198,14 +198,30 @@ def crawl_meta(timeout_minutes, index: list):
     print(f"Newly inserted data count: {new_count}")
     print(f"Final data count: {len(updated_data)}")
 
+@cli.command("meta")
+@click.option('--timeout-minutes', default=0, help='Timeout in minutes (0 for no timeout)')
+@click.option('--index', default=None, help='Index file to use', type=click.Path(exists=True, dir_okay=False))
+def ci_meta(timeout_minutes, index):
+    # read the index file (jsonlines)
+    with jsonlines.open(index) as reader:
+        index = [item for item in reader]
+
+    update_meta(timeout_minutes=timeout_minutes, index=index)
 
 
 @cli.command("all")
 @click.option('--timeout-minutes', default=0, help='Timeout in minutes (0 for no timeout)')
-def ci_all(timeout_minutes):
+@click.option('--mock-ci', default=False, help='Mock the CI env', type=bool, is_flag=True)
+def ci_all(timeout_minutes, mock_ci):
     """
     Runs the meta spider after the index spider has finished.
     """
+
+    # set the CI env if mock_ci is set
+    if mock_ci:
+        os.environ["CI"] = "true"
+
+    CI = os.environ.get('CI', False)
 
     # 8:2 allocation
     spider_index_timeout_factor = 0.8
@@ -216,21 +232,35 @@ def ci_all(timeout_minutes):
                       spider_index_timeout_factor)
 
     # data from the index spider
+    index_feed = data['feed']
     index_data = data['data*']
     index_data_new = data['data']
 
-    print(
-        f"Using `data*` {len(index_data)} for meta spider (including new discovered items {len(index_data_new)})")
 
-    # since scrapy does not allow running multiple crawler processes in the same thread,
-    # we have to run the meta spider in a separate process
-    kwargs = {
-        "timeout_minutes": timeout_minutes * spider_meta_timeout_factor,
-        "index": index_data,
-    }
-    p = Process(target=crawl_meta, kwargs=kwargs)
-    p.start()
-    p.join()
+    if CI:
+        print(f"Using `{index_feed}` {len(index_data)} for meta spider (including new discovered items {len(index_data_new)})")
+        # When CI env is set (means it is running on GitHub Actions)
+        # On Github Actions, for some reason the multiprocessing does not actually isolate the process, causing `twisted.internet.error.ReactorNotRestartable`
+        # Therefore, we have to use subprocess.run() instead of multiprocessing.Process on GitHub Actions (Ubuntu)
+        subprocess.run([
+            'python',
+            'ci.py',
+            'meta',
+            '--timeout-minutes', str(int(timeout_minutes * spider_meta_timeout_factor)), # todo: update to take floating point
+            '--index', index_feed
+        ])
+    else:
+        print(f"Using `data*` {len(index_data)} for meta spider (including new discovered items {len(index_data_new)})")
+
+        # since scrapy does not allow running multiple crawler processes in the same thread,
+        # we have to run the meta spider in a separate process
+        kwargs = {
+            "timeout_minutes": timeout_minutes * spider_meta_timeout_factor,
+            "index": index_data,
+        }
+        p = Process(target=update_meta, kwargs=kwargs)
+        p.start()
+        p.join()
 
 
 if __name__ == "__main__":
