@@ -102,13 +102,12 @@ def ci_index(timeout_minutes):
 
     # after closed.
     # read the feed file, compare with the main index file, add new items to the main index file
-    with open(feed, "r", encoding="utf-8") as f:
-        data_scraped = [json.loads(line) for line in f]
+    with jsonlines.open(feed, mode='r') as reader:
+        data_scraped = [item for item in reader]
         ids_scraped = set([item['id'] for item in data_scraped])
 
-    with open(master_index_file, "a+", encoding="utf-8") as f:
-        f.seek(0)  # move the file pointer to the beginning of the file
-        data_existing = [json.loads(line) for line in f]
+    with jsonlines.open(master_index_file, mode='a') as writer, jsonlines.open(master_index_file, mode='r') as reader:
+        data_existing = [item for item in reader]
         ids_existing = set([item['id'] for item in data_existing])
 
         # filter out existing ids from scraped ids
@@ -117,13 +116,9 @@ def ci_index(timeout_minutes):
         # filter out scraped data with existing ids
         data_new = [item for item in data_scraped if item['id'] in ids_new]
 
-        # move the file pointer back to the end of the file
-        f.seek(0, os.SEEK_END)
-
         # append new data to the main index file
-        f.write("\n".join([json.dumps(item) for item in data_new]))
-        # write trailing newline
-        f.write("\n")
+        for item in data_new:
+            writer.write(item)
 
     print(
         f"Crawling index finished. Total: {len(ids_scraped)}, New Items discovered: {len(ids_new)}")
@@ -160,9 +155,9 @@ def update_meta(timeout_minutes, index: list):
     process.start()  # the script will block here until the crawling is finished
 
     print("Crawling meta finished.")
-    
+
     # after finished
-   
+
     # read the feed jsonlines and store in a dictionary for quick lookup
     with jsonlines.open(feed) as reader:
         new_data = {item["id"]: item for item in reader}
@@ -197,6 +192,7 @@ def update_meta(timeout_minutes, index: list):
     print(f"Updated data count: {updated_count}")
     print(f"Newly inserted data count: {new_count}")
     print(f"Final data count: {len(updated_data)}")
+
 
 @cli.command("meta")
 @click.option('--timeout-minutes', default=0, help='Timeout in minutes (0 for no timeout)')
@@ -236,9 +232,9 @@ def ci_all(timeout_minutes, mock_ci):
     index_data = data['data*']
     index_data_new = data['data']
 
-
     if CI:
-        print(f"Using `{index_feed}` {len(index_data)} for meta spider (including new discovered items {len(index_data_new)})")
+        print(
+            f"Using `{index_feed}` {len(index_data)} for meta spider (including new discovered items {len(index_data_new)})")
         # When CI env is set (means it is running on GitHub Actions)
         # On Github Actions, for some reason the multiprocessing does not actually isolate the process, causing `twisted.internet.error.ReactorNotRestartable`
         # Therefore, we have to use subprocess.run() instead of multiprocessing.Process on GitHub Actions (Ubuntu)
@@ -246,11 +242,14 @@ def ci_all(timeout_minutes, mock_ci):
             'python',
             'ci.py',
             'meta',
-            '--timeout-minutes', str(int(timeout_minutes * spider_meta_timeout_factor)), # todo: update to take floating point
+            # todo: update to take floating point
+            '--timeout-minutes', str(int(timeout_minutes * \
+                                     spider_meta_timeout_factor)),
             '--index', index_feed
         ])
     else:
-        print(f"Using `data*` {len(index_data)} for meta spider (including new discovered items {len(index_data_new)})")
+        print(
+            f"Using `data*` {len(index_data)} for meta spider (including new discovered items {len(index_data_new)})")
 
         # since scrapy does not allow running multiple crawler processes in the same thread,
         # we have to run the meta spider in a separate process
