@@ -47,11 +47,16 @@ const _mock_axios_request = async <T = any>(
 
 export const Client = ({
   paths,
+  baseURL,
 }: {
   paths: {
     files: string;
     images: string;
   };
+  /**
+   * If you are running local server to serve local files, you can pass the base url of the server here. response from this client will resolve the resource url with this base url.
+   */
+  baseURL?: string;
 }): ClientInterface => {
   const clients = {
     files: {
@@ -85,7 +90,7 @@ export const Client = ({
 
       return {
         ...res,
-        data: fileImages(fileId, data, params, paths.images),
+        data: fileImages(fileId, data, params, baseURL ?? paths.images),
       };
     },
 
@@ -96,7 +101,7 @@ export const Client = ({
       if (res.status === 200) {
         return {
           ...res,
-          data: fileImageFills(fileId, data, paths.images),
+          data: fileImageFills(fileId, data, baseURL ?? paths.images),
         };
       } else {
         return res;
