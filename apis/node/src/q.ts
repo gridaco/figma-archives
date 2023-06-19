@@ -19,6 +19,11 @@ export function fileImages(
 
   const images = ids.reduce((acc, id) => {
     const exports: Array<string> = meta.map[id];
+
+    if (!exports) {
+      return acc;
+    }
+
     const resolution = exports.find(
       (d: string) => d === `@${scale}x.${format}`
     );
@@ -26,6 +31,7 @@ export function fileImages(
       scale === 1 || scale === undefined
         ? `${baseURL}/${fileId}/exports/${id}.${format}`
         : `${baseURL}/${fileId}/exports/${id}${resolution}`;
+
     return {
       ...acc,
       [id]: url,
