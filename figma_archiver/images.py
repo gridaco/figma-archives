@@ -828,6 +828,8 @@ def fetch_node_images(file_key, ids, scale, format, token, position, conncurrenc
         params["ids"] = ",".join(chunk)
         try:
             response = requests.get(url, headers=headers, params=params)
+        except requests.exceptions.ReadTimeout as e:
+            return {}
         except requests.exceptions.ConnectionError as e:
             return {}
         except requests.exceptions.JSONDecodeError as e:
