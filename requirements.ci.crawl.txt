@@ -3,3 +3,4 @@ selenium
 scrapy
 webdriver-manager
 jsonlines
+tqdm
