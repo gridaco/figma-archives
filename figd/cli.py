@@ -55,7 +55,8 @@ def archive():
     help='Figma access token (defaults to FIGMA_PERSONAL_ACCESS_TOKEN environment variable)',
     default=lambda: os.environ.get('FIGMA_PERSONAL_ACCESS_TOKEN'),
     callback=validate_source_params)
-def image(output, response, file_key, token):
+@click.option('--no-extension', is_flag=True, help='Save files without extensions')
+def image(output, response, file_key, token, no_extension):
     """Archive an image file with optional Figma metadata. 
     Requires either --response or --file-key."""
     
@@ -106,7 +107,7 @@ def image(output, response, file_key, token):
                     
                     # Detect image type from content
                     image_type = imghdr.what(None, response.content)
-                    file_ext = f'.{image_type}' if image_type else '.bin'
+                    file_ext = '' if no_extension else (f'.{image_type}' if image_type else '.bin')
                     
                     # Save the image
                     output_path = output_dir / f"{image_id}{file_ext}"

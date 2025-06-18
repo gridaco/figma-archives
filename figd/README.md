@@ -11,7 +11,7 @@ This tool allows you to download and archive image fills from a Figma file, eith
 #### Usage
 
 ```bash
-python cli.py archive image --response <path/to/response.json> [--output <output_dir>] [--file-key <figma_file_key>] [--token <access_token>]
+python cli.py archive image --response <path/to/response.json> [--output <output_dir>] [--file-key <figma_file_key>] [--token <access_token>] [--no-extension]
 ```
 
 #### Options
@@ -19,6 +19,7 @@ python cli.py archive image --response <path/to/response.json> [--output <output
 - `--output`, `-o`: Output directory where the images will be saved. Defaults to a temporary directory if not specified.
 - `--file-key`: Figma file key to fetch image fills directly from the Figma API.
 - `--token`: Figma access token. If not provided, the tool will use the `FIGMA_PERSONAL_ACCESS_TOKEN` environment variable if set.
+- `--no-extension`: Save files without extensions (e.g., `image_id` instead of `image_id.png`).
 
 > *You must provide either `--response` or `--file-key`. The `--file-key` option will fetch image fills directly from the Figma API.*
 
@@ -30,6 +31,9 @@ python cli.py archive image --response ./image-response.json --output ./download
 
 # Fetching directly from Figma
 python cli.py archive image --file-key abc123 --token xyz789
+
+# Save files without extensions
+python cli.py archive image --response ./image-response.json --no-extension
 ```
 
 This will download all image fills from the Figma file and save them in the specified directory (or a temporary directory if not specified), using the correct file extension based on the image type.
